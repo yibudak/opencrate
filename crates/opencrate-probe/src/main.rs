@@ -28,13 +28,13 @@ struct Cli {
 enum Cmd {
     /// List matching HID devices (no I/O)
     List,
-    /// EC C1 ready poll -> expect EC 41 .. [10]=1 [11]=0
+    /// EC C1 ready poll -> expect `EC 41 .. [10]=1 [11]=0`
     Ready,
     /// EC 82 firmware query -> expect EC 02 + ASCII string
     Firmware,
     /// EC B0 config-table query -> expect EC 30 ..
     Config,
-    /// EC 7F query: `probe ec7f <sub:u8> <arg:u32>` -> expect EC 7F 00 <u24>
+    /// EC 7F query: `probe ec7f <sub:u8> <arg:u32>` -> expect `EC 7F 00 <u24>`
     Ec7F { sub: u8, arg: u32 },
     /// Raw 65B query from hex: `probe raw EC7F0208000000`
     /// (padded with zeros to 65 B, sent both styles)
@@ -160,7 +160,7 @@ fn run(cli: Cli) -> i32 {
         Ok(d) => d,
         Err(e) => {
             eprintln!("open {:04X}:{:04X} failed: {e}", AURA_VID, AURA_PID_19AF);
-            eprintln!("hint: close OpenRGB/Armoury Crate — they may hold the handle");
+            eprintln!("hint: close OpenRGB/Armoury Crate â€” they may hold the handle");
             return 1;
         }
     };
@@ -262,6 +262,6 @@ fn run(cli: Cli) -> i32 {
     }
     hexdump("TX", &req);
     send_both_styles(&dev, &req);
-    println!("done — no state was changed on the device");
+    println!("done â€” no state was changed on the device");
     0
 }

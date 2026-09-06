@@ -10,7 +10,7 @@ name = "opencrate-probe"
 path = "src/main.rs"
 
 [dependencies]
-opencrate-core = { path = "../opencrate-core" }
-opencrate-aura = { path = "../opencrate-aura" }
+opencrate-core = { workspace = true }
+opencrate-aura = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 hidapi = "2"

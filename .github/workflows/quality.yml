@@ -1,0 +1,97 @@
+name: Repository quality
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Repository lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: actionlint@1.7.12
+          fallback: none
+      - name: Install lint tools
+        run: |
+          python -m pip install -r scripts/requirements-dev.txt
+          npm ci --prefix .github/linters --ignore-scripts
+      - name: Check workflow syntax and expressions
+        run: actionlint
+      - name: Check Python code and formatting
+        run: |
+          ruff check scripts
+          ruff format --check scripts
+      - name: Test privacy and release checks
+        run: python -m unittest discover -s scripts/tests -v
+      - name: Check documentation
+        run: node .github/linters/node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs
+      - name: Check publishable source
+        run: python scripts/check-privacy.py
+
+  dependencies:
+    name: Dependency policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: cargo-deny@0.20.2
+          fallback: none
+      - name: Check advisories, licenses, dependency sources and version policy
+        run: cargo deny --locked check
+
+  coverage:
+    name: Portable tests and coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install LLVM coverage tools
+        run: rustup toolchain install stable --profile minimal --component llvm-tools-preview
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: cargo-llvm-cov@0.9.0
+          fallback: none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: portable-coverage
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Test platform-independent control logic
+        run: >-
+          cargo llvm-cov --locked --no-default-features --lib
+          -p opencrate-core -p opencrate-aura -p opencrate-fan -p opencrate-power
+          --remap-path-prefix --lcov --output-path target/coverage/lcov.info
+      - name: Write coverage summary
+        run: cargo llvm-cov report --summary-only | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: portable-coverage
+          path: target/coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 14

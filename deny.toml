@@ -1,0 +1,32 @@
+# Check the shipped Windows target, including its native dependencies.
+[graph]
+targets = ["x86_64-pc-windows-gnu"]
+all-features = true
+
+[advisories]
+# Informational maintenance advisory, not a blanket vulnerability exception.
+# No patched ttf-parser exists; epaint uses it through ab_glyph for embedded fonts.
+# Review this exception when upgrading the UI/font stack.
+ignore = [
+    { id = "RUSTSEC-2026-0192", reason = "Transitive ab_glyph font parser has no patched release; replacement tracked at https://github.com/yibudak/opencrate/issues/1." },
+]
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+    "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "ISC", "MIT",
+    "OFL-1.1", "Unicode-3.0", "Zlib",
+]
+exceptions = [
+    { crate = "epaint_default_fonts@0.32.3", allow = ["Ubuntu-font-1.0"] },
+]
+
+[bans]
+# The UI dependency graph currently needs multiple windows-sys versions.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

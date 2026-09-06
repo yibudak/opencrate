@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem in OpenCrate.
+title: 'bug: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please remove personal paths, serial numbers, credentials and identifying details from logs or screenshots. Security issues belong in a private report.
+  - type: input
+    id: version
+    attributes:
+      label: OpenCrate version
+      placeholder: Release version or commit hash
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options: [Lighting, Fans, Power, Settings or tray, Installer, Translation, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Relevant environment (optional)
+      description: Windows version and, only when relevant, a generic controller model or service version. Do not include serial numbers or device instance paths.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots (optional)

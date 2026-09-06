@@ -1,0 +1,28 @@
+name: Feature proposal
+description: Suggest a focused improvement or discuss a larger change.
+title: 'feature: '
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the use case and who benefits.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and supporting information
+      description: Public protocol references or mockups are welcome. Remove personal and device-identifying details.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you like to help implement it?
+      options: ['Yes', 'With guidance', 'I am proposing an idea']

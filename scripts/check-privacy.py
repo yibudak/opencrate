@@ -7,23 +7,54 @@ license attribution remains intact. Use --payload to inspect unpacked releases.
 
 import argparse
 import os
-from pathlib import Path
 import re
 import struct
 import subprocess
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ROOT_FILES = {".gitignore", ".gitattributes", "Cargo.toml", "Cargo.lock",
-              "rust-toolchain.toml", "README.md", "LICENSE"}
+ROOT_FILES = {
+    ".gitignore",
+    ".gitattributes",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "README.md",
+    "LICENSE",
+    ".editorconfig",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "deny.toml",
+    "pyproject.toml",
+    ".markdownlint-cli2.jsonc",
+}
 ROOT_DIRS = {".github", "assets", "crates", "installer", "rev", "scripts"}
 BINARY_ASSETS = {
-    "assets/branding/opencrate-logo.png", "assets/branding/opencrate-icon.png",
-    "assets/branding/opencrate-icon-256.png", "assets/branding/opencrate-icon-48.png",
-    "assets/branding/opencrate-icon.ico", "assets/fonts/NotoSansSC-Regular.ttf",
+    "assets/branding/opencrate-logo.png",
+    "assets/branding/opencrate-icon.png",
+    "assets/branding/opencrate-icon-256.png",
+    "assets/branding/opencrate-icon-48.png",
+    "assets/branding/opencrate-icon.ico",
+    "assets/fonts/NotoSansSC-Regular.ttf",
 }
-PRIVATE_SUFFIXES = {".log", ".dmp", ".pcap", ".pcapng", ".idb", ".i64",
-                    ".til", ".pdb", ".pem", ".key", ".pfx", ".p12", ".exe", ".dll"}
+PRIVATE_SUFFIXES = {
+    ".log",
+    ".dmp",
+    ".pcap",
+    ".pcapng",
+    ".idb",
+    ".i64",
+    ".til",
+    ".pdb",
+    ".pem",
+    ".key",
+    ".pfx",
+    ".p12",
+    ".exe",
+    ".dll",
+}
 PRIVATE_CHUNKS = {b"tEXt", b"zTXt", b"iTXt", b"tIME", b"eXIf", b"caBX"}
 PATTERNS = {
     "absolute user directory": re.compile(r"(?i)[a-z]:[\\/]+Users[\\/]+[^\s\\/\"']+"),
@@ -39,7 +70,7 @@ def png_metadata(data):
     offset = 8
     while offset + 12 <= len(data):
         size = struct.unpack_from(">I", data, offset)[0]
-        kind = data[offset + 4:offset + 8]
+        kind = data[offset + 4 : offset + 8]
         if kind in PRIVATE_CHUNKS:
             return True
         offset += size + 12
@@ -53,7 +84,7 @@ def image_metadata(path, data):
         count = struct.unpack_from("<H", data, 4)[0]
         for i in range(count):
             size, start = struct.unpack_from("<II", data, 6 + i * 16 + 8)
-            image = data[start:start + size]
+            image = data[start : start + size]
             if image.startswith(b"\x89PNG") and png_metadata(image):
                 return True
     return False
@@ -67,8 +98,10 @@ def inspect(path, label, payload=False):
     # Inspect text and UTF-16 Windows strings in executables and font tables.
     views = [data.decode("utf-8", errors="replace")]
     if b"\0" in data:
-        views += [data.decode("utf-16-le", errors="ignore"),
-                  data[1:].decode("utf-16-le", errors="ignore")]
+        views += [
+            data.decode("utf-16-le", errors="ignore"),
+            data[1:].decode("utf-16-le", errors="ignore"),
+        ]
     for description, pattern in PATTERNS.items():
         if any(pattern.search(view) for view in views):
             findings.append(description)
@@ -98,9 +131,19 @@ def main():
         files = [(p, p.name) for p in paths if p.is_file()]
     else:
         result = subprocess.run(
-            ["git", "-c", f"safe.directory={ROOT.as_posix()}", "ls-files",
-             "--cached", "--others", "--exclude-standard", "-z"],
-            cwd=ROOT, check=True, stdout=subprocess.PIPE,
+            [
+                "git",
+                "-c",
+                f"safe.directory={ROOT.as_posix()}",
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            ],
+            cwd=ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
         )
         names = sorted(set(result.stdout.decode("utf-8").split("\0")) - {""})
         files = []
@@ -108,7 +151,10 @@ def main():
             path = Path(name)
             allowed = name in ROOT_FILES or path.parts[0] in ROOT_DIRS
             private = path.suffix.lower() in PRIVATE_SUFFIXES or path.name == "settings.json"
-            private |= any(part in {"upstream", "__pycache__"} or part.startswith(".env") for part in path.parts)
+            private |= any(
+                part in {"upstream", "__pycache__"} or part.startswith(".env")
+                for part in path.parts
+            )
             if not allowed or private:
                 print(f"FAIL {name}: file is outside the publishable source allowlist")
                 failed = True

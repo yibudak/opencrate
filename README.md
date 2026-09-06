@@ -1,5 +1,8 @@
 # OpenCrate
 
+[![CI](https://github.com/yibudak/opencrate/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/yibudak/opencrate/actions/workflows/windows.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An open-source alternative to Armoury Crate for Windows, with RGB lighting, fan and power controls in one desktop app.
 
 OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS.
@@ -81,13 +84,29 @@ Closing the window keeps OpenCrate running in the tray. Choose **Show OpenCrate*
 
 ## Contributing translations
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, portable tests,
+dependency policy and the pull request process. Bug reports and feature proposals
+have [issue templates](https://github.com/yibudak/opencrate/issues/new/choose).
+Follow the [code of conduct](CODE_OF_CONDUCT.md) and report vulnerabilities through
+the [private security process](SECURITY.md).
+
 Keep code, comments and documentation in English. User-visible translations belong in `assets/locales/en.json`, `zh-CN.json` and `tr.json`. English source strings are the catalog keys; update all three catalogs together and preserve named placeholders such as `{percent}`. Display labels must never replace serialized effect IDs, fan IDs or Windows power-plan GUIDs.
 
 Catalog tests check key and placeholder parity, effect/menu coverage and font coverage. Preference tests cover migration and saved-language round trips. Windows-owned names, user-defined plan names and low-level diagnostics retain their original text; the surrounding UI is translated. Some built-in color-picker tooltips are supplied in English by egui.
 
 ## Automated builds and releases
 
-Pull requests, pushes to `main` and manual workflow runs build and test the Windows app and installer. Passing runs provide a setup executable and checksum as workflow artifacts. A `v<major>.<minor>.<patch>` tag matching `Cargo.toml` additionally publishes those files to GitHub Releases after all checks pass. See [release instructions](installer/README.md#github-actions-and-releases).
+Pull requests, pushes to `main` and manual workflow runs check Rust formatting,
+Clippy, unit tests and Rustdoc; workflow, Python, PowerShell and documentation
+quality; dependency advisories, licenses and sources; and CodeQL analysis for
+Rust, Python and Actions. Linux jobs run portable tests and publish an LCOV report.
+Windows jobs build and test the installer. Fork PRs run without repository secrets.
+
+Passing runs provide a setup executable and checksum as workflow artifacts.
+A `v<major>.<minor>.<patch>` tag matching `Cargo.toml` publishes those files to
+GitHub Releases only after all quality, security and Windows checks succeed.
+Weekly checks and Dependabot updates help catch dependency changes. See
+[release instructions](installer/README.md#github-actions-and-releases).
 
 ## Privacy when contributing
 

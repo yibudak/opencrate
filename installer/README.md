@@ -40,9 +40,19 @@ Source paths are remapped during compilation, release symbols are stripped,
 and the unpacked payload is checked before Inno Setup compresses it. A reused
 binary supplied with `-SkipBuild` must pass the same payload privacy check.
 
+Publication also requires repository lint, dependency policy, portable tests and
+CodeQL checks to pass. Repeated publication runs verify an existing public release
+and leave its assets untouched. Interrupted draft uploads can resume; the installer
+is downloaded and checked against the tested build before the draft becomes public.
+New releases record their source tree in the release notes to reject conflicting
+drafts or retagged source. Legacy releases without that record still have their
+asset names and checksums verified. Main and tag runs finish normally; only an
+older PR run is cancelled when a newer commit supersedes it.
+
 To publish a release:
 
-1. Update `workspace.package.version` in `Cargo.toml` and refresh `Cargo.lock`.
+1. Update `workspace.package.version` in `Cargo.toml`, keep internal workspace
+   dependency requirements compatible, and refresh `Cargo.lock`.
 2. Commit and push the reviewed changes to `main` and check the workflow result.
 3. Create a lightweight `v<major>.<minor>.<patch>` tag on that commit and push it.
 4. The tag workflow requires an exact package-version match. Once all checks

@@ -10,10 +10,10 @@ name = "opencrate-ui"
 path = "src/main.rs"
 
 [dependencies]
-opencrate-core = { path = "../opencrate-core" }
-opencrate-aura = { path = "../opencrate-aura" }
-opencrate-fan = { path = "../opencrate-fan" }
-opencrate-power = { path = "../opencrate-power" }
+opencrate-core = { workspace = true }
+opencrate-aura = { workspace = true }
+opencrate-fan = { workspace = true }
+opencrate-power = { workspace = true }
 eframe = "0.32"
 tray-icon = "0.20"
 serde = { version = "1", features = ["derive"] }

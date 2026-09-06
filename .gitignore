@@ -25,3 +25,6 @@ settings.json
 .vscode/
 __pycache__/
 *.pyc
+node_modules/
+.venv/
+.ruff_cache/

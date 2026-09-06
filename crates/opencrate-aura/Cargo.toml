@@ -10,7 +10,7 @@ default = ["hid"]
 hid = ["dep:hidapi"]
 
 [dependencies]
-opencrate-core = { path = "../opencrate-core" }
+opencrate-core = { workspace = true }
 hidapi = { version = "2", optional = true }
 
 [[example]]

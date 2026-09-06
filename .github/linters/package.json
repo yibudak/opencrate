@@ -1,0 +1,7 @@
+{
+  "name": "opencrate-repository-lint",
+  "private": true,
+  "devDependencies": {
+    "markdownlint-cli2": "0.23.2"
+  }
+}
