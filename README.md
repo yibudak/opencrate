@@ -1,124 +1,68 @@
 # OpenCrate
 
-[![CI](https://github.com/yibudak/opencrate/actions/workflows/windows.yml/badge.svg?branch=main)](https://github.com/yibudak/opencrate/actions/workflows/windows.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="assets/branding/opencrate-logo.png" alt="OpenCrate logo" width="420">
+</p>
+<!-- markdownlint-enable MD033 -->
 
-An open-source alternative to Armoury Crate for Windows, with RGB lighting, fan and power controls in one desktop app.
+**Make your PC feel like yours.**
 
-OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS.
+Control your PC's lights, fans and power settings in one free app.
+An alternative to Armoury Crate for supported ASUS hardware.
 
-## Features
+[![Download for Windows](assets/readme/download.svg)](https://github.com/yibudak/opencrate/releases/latest)
 
-- **Lighting:** synchronized RGB control, 17 effects, a color picker, brightness adjustment and animation speed from 0.25× to 4×.
-- **Cooling:** available ASUS cooling profiles, manual fan speed, custom temperature curves, Full Blast and other actions for all fans, with restoration and undo controls.
-- **Power:** installed Windows power plans, separate plugged-in and battery processor settings, boost mode, energy preference and undo for the last change.
-- **Desktop integration:** notification-area controls, optional launch at Windows sign-in, optional tray startup and restoration of the last applied lighting settings.
-- **Appearance:** matching light and dark themes with amber accents. Follow Windows app mode automatically (default), or choose **System**, **Light** or **Dark** in **Settings → Appearance**. Changes apply immediately.
-- **Languages:** English (default), Simplified Chinese and Turkish. Change the language in **Settings → Application language**; it applies immediately and is remembered for the next launch.
+Windows 10 / 11 · x64 · Free & open source
 
-## Hardware support
+![OpenCrate's Lighting page showing a static red effect, color picker and brightness controls.](assets/readme/opencrate-lighting.png)
 
-Lighting currently targets the ASUS USB controller `0B05:19AF` and its supported four-channel firmware layout. Matching the vendor name alone does not establish compatibility; other controllers and firmware layouts are not supported by this backend. This is an evolving alternative with a smaller hardware and feature set than Armoury Crate.
+**Your lights, your way.** Choose from 17 effects, pick a color and set the mood.
 
-Armoury Crate itself is not required. Lighting uses the controller's HID interface, and all lights are synchronized. **Fan control requires a compatible `AsusFanControlService` installation to be running.** OpenCrate does not install this service; uninstalling ASUS software may remove it. Without it, fan controls are unavailable, while supported RGB and Windows power controls remain independent. Unsupported fans remain read-only. Fan output is shown as duty percentage, with no live RPM reading. Custom curves preserve the controller's minimum duty and critical-temperature requirements.
+Available controls depend on your PC.
 
-Power control uses Windows power-policy APIs. Available settings depend on Windows, hardware and permissions. Processor percentages are performance policies, not CPU watt limits; the app does not expose voltage, PPT/TDC/EDC or BIOS tuning.
+## Get started in 3 steps
 
-## Install on Windows
+1. **Download.** Open the [latest release](https://github.com/yibudak/opencrate/releases/latest). Under **Assets**, choose the file ending in **`windows-x64-setup.exe`**. The “Source code” files are for developers.
+2. **Install.** Open the downloaded file and follow the setup instructions.
+3. **Make it yours.** Open **OpenCrate** from the Start menu. In **Lighting**, pick an effect and click **Apply changes**.
 
-Download `OpenCrate-<version>-windows-x64-setup.exe` from the [latest release](https://github.com/yibudak/opencrate/releases/latest) and follow the wizard. Choose the setup executable, not GitHub's source-code ZIP. Native x64 Windows 10 (1809 or later) and Windows 11 are supported; ARM64 is not supported. The installer supports English, Simplified Chinese and Turkish, creates a Start menu shortcut, and can add a desktop shortcut. It installs for the current user without requiring administrator rights. Remove it from Windows **Settings → Apps → Installed apps** when needed.
+The current installer is unsigned, so Windows may show an unknown-publisher warning.
 
-Before upgrading or uninstalling, choose **Quit** from OpenCrate's tray menu. Your saved preferences are preserved. Hardware requirements still apply; the installer does not include ASUS services or drivers.
+## Will it work on my PC?
 
-To produce the setup executable from this repository:
+- **Windows:** Windows 10 (1809 or later) or Windows 11, on an x64 PC. ARM-based PCs are not supported.
+- **Lights:** Only certain ASUS lighting controllers are supported. Not every ASUS PC or accessory will work. See [supported hardware](https://github.com/yibudak/opencrate/blob/main/rev/REFERENCE.md#hardware-support).
+- **Fans:** Require a compatible ASUS fan service already installed and running. OpenCrate does not install it. **Keep your existing ASUS fan service if you want fan control.**
 
-```powershell
-.\scripts\build-installer.ps1 -BootstrapInnoSetup
-```
+Armoury Crate itself is not required, but removing ASUS software may also remove the fan service.
+Windows power controls work independently; available options depend on your PC.
 
-The setup executable and SHA-256 checksum are written to `dist`. See [installer documentation](installer/README.md) for packaging, tests and signing. Releases are currently unsigned and may trigger a Windows reputation prompt.
+## A few useful things
 
-## Build and run
-
-Use Windows with Rust and the MinGW-w64 GNU linker/resource compiler (`gcc` and `windres`) on PATH. Select the GNU Windows toolchain for this directory with the commands below. `rust-toolchain.toml` uses native stable Rust for compatibility with Linux tooling and Dependabot. GitHub Actions installs and selects the Windows build tools automatically.
-
-```powershell
-rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal --component rustfmt --component clippy
-rustup override set stable-x86_64-pc-windows-gnu
-cargo build --locked --release -p opencrate-ui
-.\target\release\opencrate-ui.exe
-```
-
-For development:
-
-```powershell
-cargo run --locked -p opencrate-ui
-cargo test --locked --workspace
-cargo clippy --locked -p opencrate-ui --all-targets -- -D warnings
-```
-
-Fonts, translations and icons are embedded in the executable. No language pack or network connection is needed to display the interface. The first Cargo build downloads dependencies unless they are already cached.
-
-## Settings and application lifetime
-
-Preferences are stored in `%APPDATA%\opencrate\settings.json`. They include `language` (`en`, `zh-CN` or `tr`), `theme` (`system`, `light` or `dark`), tray startup, lighting restoration and the last successfully applied lighting configuration. Existing files without a language field continue to work in English; an unknown language also falls back to English. Missing or unknown theme values follow Windows app mode. Theme choices are remembered across launches; System mode also follows Windows changes while OpenCrate is running, including in the tray.
-
-Closing the window keeps OpenCrate running in the tray. Choose **Show OpenCrate** to reopen it or **Quit** to exit.
-
-The interface uses a cached CPU renderer, so opening it does not load an OpenGL or Vulkan driver. Closing or minimizing the window releases its drawing buffers and stops visual animation. Tray actions, lighting playback, settings saves and hardware workers continue independently. The lighting preview runs at approximately 20 frames per second while focused; this does not change the hardware playback rate.
-
-- Lighting animations continue in the tray. On Quit, lighting falls back to a built-in controller effect; dimmed multicolor animations remain as a static color.
-- Fan changes are temporary. Normal Quit restores the original curves that OpenCrate still owns. Fan settings are not reapplied at startup.
-- Applied power settings persist in Windows after Quit and restart. Undo history lasts only for the current session.
-
-**Launch with Windows** registers the current executable under the current user's Windows Run key. If you move the executable, disable and re-enable this option from the new location.
-
-For reproducible, hardware-free memory and CPU measurements, run `python scripts/test-ui-runtime.py` on Windows. Add `--start-hidden` to test launching directly into the tray. These checks build an opt-in diagnostic executable, use isolated preferences and instance names, and save measurements and rendered screenshots under `target`. Normal installer builds omit diagnostic support. See [performance notes](rev/performance.md) for the measurement method and limits.
-
-## Project layout
-
-| Directory | Purpose |
+| You want to… | Here's how |
 | --- | --- |
-| `crates/opencrate-ui` | Desktop interface, translations, tray and preferences |
-| `crates/opencrate-core` | Shared effect identifiers and RGB types |
-| `crates/opencrate-aura` | Lighting protocol, animation and playback |
-| `crates/opencrate-fan` | ASUS fan service integration and cooling actions |
-| `crates/opencrate-power` | Windows power policy integration |
-| `crates/opencrate-cli`, `crates/opencrate-probe` | Command-line tools and hardware diagnostics |
-| `assets/locales` | Embedded English, Simplified Chinese and Turkish catalogs |
-| `assets/fonts` | Bundled CJK fallback font and license |
-| `rev` | Protocol and implementation documentation |
+| Change the language | **Settings → Application language**. English, 简体中文 and Türkçe are included. |
+| Change the appearance | **Settings → Appearance**. Choose **System**, **Light** or **Dark**. |
+| Start the app with your PC | Turn on **Launch with Windows** in Settings. |
+| Keep it running in the background | Close the window. OpenCrate stays in the icon area next to the Windows clock. |
+| Exit completely | Right-click the OpenCrate icon next to the clock → **Quit**. |
 
-## Contributing translations
+<!-- markdownlint-disable MD033 -->
+<details>
+<summary><strong>Updating, uninstalling or wondering what happens when you quit?</strong></summary>
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, portable tests,
-dependency policy and the pull request process. Bug reports and feature proposals
-have [issue templates](https://github.com/yibudak/opencrate/issues/new/choose).
-Follow the [code of conduct](CODE_OF_CONDUCT.md) and report vulnerabilities through
-the [private security process](SECURITY.md).
+- **Update:** Choose **Quit** from the OpenCrate icon menu, then run the new installer. Your preferences are kept.
+- **Uninstall:** Quit first, then remove OpenCrate from Windows **Settings → Apps**. Saved preferences are kept.
+- **When you quit:** Lighting switches to a built-in effect, temporary fan changes are restored where OpenCrate still controls them, and Windows power changes stay applied.
 
-Keep code, comments and documentation in English. User-visible translations belong in `assets/locales/en.json`, `zh-CN.json` and `tr.json`. English source strings are the catalog keys; update all three catalogs together and preserve named placeholders such as `{percent}`. Display labels must never replace serialized effect IDs, fan IDs or Windows power-plan GUIDs.
+</details>
+<!-- markdownlint-enable MD033 -->
 
-Catalog tests check key and placeholder parity, effect/menu coverage and font coverage. Preference tests cover migration and saved-language round trips. Windows-owned names, user-defined plan names and low-level diagnostics retain their original text; the surrounding UI is translated. Some built-in color-picker tooltips are supplied in English by egui.
+## Need a hand?
 
-## Automated builds and releases
+[Report a problem or suggest a feature](https://github.com/yibudak/opencrate/issues/new/choose) · [Advanced guide](https://github.com/yibudak/opencrate/blob/main/rev/REFERENCE.md) · [Contribute](https://github.com/yibudak/opencrate/blob/main/CONTRIBUTING.md)
 
-Pull requests, pushes to `main` and manual workflow runs check Rust formatting,
-Clippy, unit tests and Rustdoc; workflow, Python, PowerShell and documentation
-quality; dependency advisories, licenses and sources; and CodeQL analysis for
-Rust, Python and Actions. Linux jobs run portable tests and publish an LCOV report.
-Windows jobs build and test the installer. Fork PRs run without repository secrets.
-
-Passing runs provide a setup executable and checksum as workflow artifacts.
-A `v<major>.<minor>.<patch>` tag matching `Cargo.toml` publishes those files to
-GitHub Releases only after all quality, security and Windows checks succeed.
-Weekly checks and Dependabot updates help catch dependency changes. See
-[release instructions](installer/README.md#github-actions-and-releases).
-
-## Privacy when contributing
-
-Do not commit personal settings, device captures, firmware dumps, log files, credentials or local build outputs. Diagnostic tools can print device paths and custom power-plan names; review their output before sharing it. Public tests use synthetic fixtures. The build remaps source paths and checks release payloads for local user directories before packaging.
-
-## Credits
-
-OpenRGB protocol research informed the lighting implementation; supporting notes and references are in `rev`. OpenCrate's own branding assets are documented in `assets/branding/README.md`. The bundled Noto Sans SC font uses the SIL Open Font License; see [font attribution](assets/fonts/README.md) and [license](assets/fonts/OFL-NotoSansSC.txt).
+OpenCrate is an independent project, not affiliated with or endorsed by ASUS.
+Released under the [MIT license](https://github.com/yibudak/opencrate/blob/main/LICENSE).
+[Credits & acknowledgments](https://github.com/yibudak/opencrate/blob/main/rev/REFERENCE.md#credits).
