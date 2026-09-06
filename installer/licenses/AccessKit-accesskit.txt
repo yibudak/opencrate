@@ -1,4 +1,4 @@
-Upstream license supplement: https://github.com/AccessKit/accesskit/tree/daf5fafd63c42f62cc824a1f72e17aff1d102108
+Upstream license supplement: https://github.com/AccessKit/accesskit/tree/0b6901a8c8e6fb1cb5a2dc7c19dc7bee1cc5ad09
 
 --- LICENSE-APACHE ---
                               Apache License

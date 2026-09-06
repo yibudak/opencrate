@@ -4,7 +4,7 @@ use crate::{
     i18n::{self, t, Message},
     theme::*,
 };
-use eframe::egui::{self, vec2, RichText, Ui};
+use egui::{vec2, RichText, Ui};
 use opencrate_power::{
     service::{Command, Controller},
     *,
@@ -59,7 +59,11 @@ pub struct State {
 impl State {
     pub fn new(ctx: &egui::Context) -> Self {
         let wake = ctx.clone();
-        let result = Controller::start(move || wake.request_repaint());
+        let result = if crate::runtime::hardware_enabled() {
+            Controller::start(move || wake.request_repaint())
+        } else {
+            Err(std::io::Error::other("Diagnostic mode"))
+        };
         let error = result.as_ref().err().map(ToString::to_string);
         Self {
             controller: result.ok(),

@@ -6,15 +6,18 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod dashboard;
+#[cfg(feature = "diagnostics")]
+mod diagnostics;
 mod fans;
 mod i18n;
 mod power;
 mod preferences;
+mod runtime;
+mod software;
 mod theme;
 mod window_activation;
 mod windows_startup;
 
-use eframe::egui;
 use i18n::{t, Message};
 use opencrate_aura::{
     animation::is_animated,
@@ -63,7 +66,7 @@ const PRESETS: &[Preset] = &[
 
 /// Small version of the OpenCrate brand mark for the notification area.
 fn tray_icon_rgba() -> (Vec<u8>, u32, u32) {
-    let icon = eframe::icon_data::from_png_bytes(include_bytes!(
+    let icon = crate::runtime::icon_from_png(include_bytes!(
         "../../../assets/branding/opencrate-icon-48.png"
     ))
     .expect("embedded OpenCrate tray icon");
@@ -139,13 +142,13 @@ impl App {
     }
 
     fn new(
-        creation: &eframe::CreationContext<'_>,
+        ctx: &egui::Context,
+        native_window: &winit::window::Window,
         store: preferences::Store,
         mut instance: windows_startup::Instance,
     ) -> std::io::Result<Self> {
-        let ctx = &creation.egui_ctx;
         i18n::set_language(store.preferences.language);
-        let window = window_activation::WindowActivation::new(creation)?;
+        let window = window_activation::WindowActivation::new(ctx, native_window)?;
         let activate = window.clone();
         instance.listen(move || activate.show())?;
         let saved = store.preferences.lighting().unwrap_or(Settings {
@@ -163,7 +166,13 @@ impl App {
             ),
         };
         let wake = ctx.clone();
-        let lighting = LightingController::start(move || wake.request_repaint());
+        let lighting = if runtime::hardware_enabled() {
+            LightingController::start(move || wake.request_repaint())
+        } else {
+            Err(opencrate_aura::AuraError::Transport(
+                "Diagnostic mode".into(),
+            ))
+        };
         let status = match &lighting {
             Ok(_) => Message::text("Choose an effect to get started."),
             Err(error) => Message::with(
@@ -393,8 +402,8 @@ impl Drop for App {
     }
 }
 
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+impl App {
+    fn update(&mut self, ctx: &egui::Context, draw: bool) {
         // Close button -> hide to tray instead of quitting.
         if ctx.input(|i| i.viewport().close_requested()) && !self.quit_requested {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
@@ -406,11 +415,18 @@ impl eframe::App for App {
         self.fans.poll();
         self.power.poll();
 
-        self.render_dashboard(ctx);
+        if draw {
+            self.render_dashboard(ctx);
+        }
     }
 }
 
 fn main() {
+    #[cfg(feature = "diagnostics")]
+    if diagnostics::enabled() {
+        diagnostics::run();
+        return;
+    }
     let from_startup = std::env::args_os().skip(1).any(|arg| arg == "--startup");
     let instance = match windows_startup::Instance::claim(from_startup) {
         Ok(Some(instance)) => instance,
@@ -422,24 +438,7 @@ fn main() {
     };
     let store = preferences::Store::load();
     let start_hidden = from_startup && store.preferences.start_in_tray && store.error.is_none();
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_icon(
-                eframe::icon_data::from_png_bytes(include_bytes!(
-                    "../../../assets/branding/opencrate-icon-256.png"
-                ))
-                .expect("embedded OpenCrate window icon"),
-            )
-            .with_inner_size([1100.0, 800.0])
-            .with_min_inner_size([760.0, 620.0])
-            .with_visible(!start_hidden),
-        ..Default::default()
-    };
-    if let Err(e) = eframe::run_native(
-        "OpenCrate",
-        options,
-        Box::new(move |cc| Ok(Box::new(App::new(cc, store, instance)?) as Box<dyn eframe::App>)),
-    ) {
+    if let Err(e) = runtime::run(store, instance, start_hidden) {
         eprintln!("opencrate-ui failed: {e}");
         std::process::exit(1);
     }

@@ -24,3 +24,6 @@ opencrate-power = { path = "crates/opencrate-power", version = "0.1.0" }
 
 [profile.release]
 strip = true
+
+[profile.dev.package.egui_software_backend]
+opt-level = 3

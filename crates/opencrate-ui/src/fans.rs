@@ -5,7 +5,7 @@ use crate::{
     i18n::{self, t, Message},
     theme::*,
 };
-use eframe::egui::{self, pos2, vec2, Align, Align2, FontId, Layout, Rect, RichText, Stroke, Ui};
+use egui::{pos2, vec2, Align, Align2, FontId, Layout, Rect, RichText, Stroke, Ui};
 use opencrate_fan::quick::{self, QuickMode};
 use opencrate_fan::service::{
     critical_temperature, manual_curve, percent, raw_duty, validate_custom, Command, Controller,
@@ -99,7 +99,11 @@ impl State {
     }
     pub fn new(ctx: &egui::Context) -> Self {
         let wake = ctx.clone();
-        let controller = Controller::start(move || wake.request_repaint());
+        let controller = if crate::runtime::hardware_enabled() {
+            Controller::start(move || wake.request_repaint())
+        } else {
+            Err(std::io::Error::other("Diagnostic mode"))
+        };
         let error = controller.as_ref().err().map(ToString::to_string);
         Self {
             controller: controller.ok(),

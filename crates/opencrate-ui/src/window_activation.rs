@@ -1,7 +1,5 @@
 //! Reveal the root window even when hidden-window redraws are suspended.
 
-use eframe::egui;
-
 #[cfg(windows)]
 use std::sync::{
     atomic::{AtomicIsize, Ordering},
@@ -16,11 +14,13 @@ pub struct WindowActivation {
 }
 
 impl WindowActivation {
-    pub fn new(creation: &eframe::CreationContext<'_>) -> std::io::Result<Self> {
+    pub fn new(context: &egui::Context, window: &winit::window::Window) -> std::io::Result<Self> {
+        #[cfg(not(windows))]
+        let _ = window;
         #[cfg(windows)]
         let handle = {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-            match creation
+            match window
                 .window_handle()
                 .map_err(std::io::Error::other)?
                 .as_raw()
@@ -30,7 +30,7 @@ impl WindowActivation {
             }
         };
         Ok(Self {
-            context: creation.egui_ctx.clone(),
+            context: context.clone(),
             #[cfg(windows)]
             handle,
         })
@@ -50,7 +50,7 @@ impl WindowActivation {
             if handle.is_null() {
                 return;
             }
-            // SAFETY: This is eframe's own root HWND, never an enumerated window.
+            // SAFETY: This is our root HWND, never an enumerated window.
             // App::drop invalidates it. Asynchronous show posts to the owning
             // message loop so no egui redraw or cross-thread blocking is needed.
             unsafe {

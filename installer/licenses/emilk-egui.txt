@@ -1,4 +1,4 @@
-Upstream license supplement: https://github.com/emilk/egui/tree/af96e0373c18477b77236e2bfc89735af007b1c2
+Upstream license supplement: https://github.com/emilk/egui/tree/44cdd653e2317d300fb8a6c9c36b03f23991e803
 
 --- LICENSE-APACHE ---
                               Apache License

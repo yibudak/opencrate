@@ -77,7 +77,23 @@ jobs:
         run: cargo test --locked --workspace
 
       - name: Check Clippy warnings
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Check native UI lifecycle and resource budgets without hardware
+        run: |
+          python scripts/test-ui-runtime.py
+          if ($LASTEXITCODE -ne 0) { throw 'Visible UI lifecycle failed.' }
+          python scripts/test-ui-runtime.py --start-hidden
+          if ($LASTEXITCODE -ne 0) { throw 'Tray startup lifecycle failed.' }
+
+      - name: Upload native UI measurements and captures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-runtime-diagnostics
+          path: target/ui-runtime-*/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Check Rust documentation
         env:
