@@ -145,6 +145,7 @@ impl App {
     ) -> std::io::Result<Self> {
         let ctx = &creation.egui_ctx;
         i18n::set_language(store.preferences.language);
+        store.preferences.theme.apply(ctx);
         let window = window_activation::WindowActivation::new(creation)?;
         let activate = window.clone();
         instance.listen(move || activate.show())?;

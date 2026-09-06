@@ -2,18 +2,106 @@
 
 use crate::i18n::t;
 use eframe::egui::{self, pos2, vec2, Color32, FontId, Rect, RichText, Stroke, Ui};
+use serde::{Deserialize, Serialize};
 
-pub const BACKGROUND: Color32 = Color32::from_rgb(17, 19, 23);
-pub const SIDEBAR: Color32 = Color32::from_rgb(21, 23, 27);
-pub const SURFACE: Color32 = Color32::from_rgb(27, 30, 35);
-pub const INPUT: Color32 = Color32::from_rgb(34, 38, 44);
-pub const BORDER: Color32 = Color32::from_rgb(48, 53, 61);
-pub const TEXT: Color32 = Color32::from_rgb(238, 239, 242);
-pub const MUTED: Color32 = Color32::from_rgb(151, 158, 171);
-pub const ACCENT: Color32 = Color32::from_rgb(244, 177, 64);
-pub const ACCENT_DIM: Color32 = Color32::from_rgb(53, 43, 28);
-pub const GREEN: Color32 = Color32::from_rgb(113, 207, 161);
-pub const RED: Color32 = Color32::from_rgb(248, 132, 137);
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemePreference {
+    Light,
+    Dark,
+    #[default]
+    #[serde(other)]
+    System,
+}
+
+impl ThemePreference {
+    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+
+    pub fn label(self) -> &'static str {
+        t(match self {
+            Self::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        })
+    }
+
+    pub fn apply(self, ctx: &egui::Context) {
+        ctx.set_theme(match self {
+            Self::System => egui::ThemePreference::System,
+            Self::Light => egui::ThemePreference::Light,
+            Self::Dark => egui::ThemePreference::Dark,
+        });
+        // Keep the title bar aligned with the preference, including System mode.
+        ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(match self {
+            Self::System => egui::SystemTheme::SystemDefault,
+            Self::Light => egui::SystemTheme::Light,
+            Self::Dark => egui::SystemTheme::Dark,
+        }));
+        ctx.request_repaint();
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Palette {
+    pub background: Color32,
+    pub sidebar: Color32,
+    pub surface: Color32,
+    pub input: Color32,
+    pub border: Color32,
+    pub text: Color32,
+    pub muted: Color32,
+    pub accent: Color32,
+    pub accent_dim: Color32,
+    pub on_accent: Color32,
+    pub green: Color32,
+    pub red: Color32,
+    hover: Color32,
+}
+
+impl Palette {
+    pub fn for_theme(theme: egui::Theme) -> Self {
+        match theme {
+            egui::Theme::Dark => Self {
+                background: Color32::from_rgb(17, 19, 23),
+                sidebar: Color32::from_rgb(21, 23, 27),
+                surface: Color32::from_rgb(27, 30, 35),
+                input: Color32::from_rgb(34, 38, 44),
+                border: Color32::from_rgb(48, 53, 61),
+                text: Color32::from_rgb(238, 239, 242),
+                muted: Color32::from_rgb(151, 158, 171),
+                accent: Color32::from_rgb(244, 177, 64),
+                accent_dim: Color32::from_rgb(53, 43, 28),
+                on_accent: Color32::from_rgb(17, 19, 23),
+                green: Color32::from_rgb(113, 207, 161),
+                red: Color32::from_rgb(248, 132, 137),
+                hover: Color32::from_rgb(45, 48, 55),
+            },
+            egui::Theme::Light => Self {
+                background: Color32::from_rgb(245, 246, 248),
+                sidebar: Color32::from_rgb(237, 239, 242),
+                surface: Color32::WHITE,
+                input: Color32::from_rgb(240, 242, 245),
+                border: Color32::from_rgb(207, 212, 220),
+                text: Color32::from_rgb(30, 34, 42),
+                muted: Color32::from_rgb(91, 100, 114),
+                accent: Color32::from_rgb(147, 86, 8),
+                accent_dim: Color32::from_rgb(255, 237, 207),
+                on_accent: Color32::WHITE,
+                green: Color32::from_rgb(26, 116, 75),
+                red: Color32::from_rgb(183, 45, 62),
+                hover: Color32::from_rgb(226, 230, 236),
+            },
+        }
+    }
+}
+
+pub fn palette(ui: &Ui) -> Palette {
+    Palette::for_theme(if ui.visuals().dark_mode {
+        egui::Theme::Dark
+    } else {
+        egui::Theme::Light
+    })
+}
 
 pub fn install(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
@@ -32,71 +120,108 @@ pub fn install(ctx: &egui::Context) {
             .push("opencrate-cjk".into());
     }
     ctx.set_fonts(fonts);
-    ctx.set_theme(egui::Theme::Dark);
-    let mut style = (*ctx.style()).clone();
-    style.text_styles = [
-        (egui::TextStyle::Heading, FontId::proportional(28.0)),
-        (egui::TextStyle::Body, FontId::proportional(14.0)),
-        (egui::TextStyle::Button, FontId::proportional(14.0)),
-        (egui::TextStyle::Small, FontId::proportional(12.0)),
-        (egui::TextStyle::Monospace, FontId::monospace(13.0)),
-    ]
-    .into();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        ctx.set_style_of(theme, style(theme));
+    }
+}
+
+fn style(theme: egui::Theme) -> egui::Style {
+    let colors = Palette::for_theme(theme);
+    let mut style = egui::Style {
+        text_styles: [
+            (egui::TextStyle::Heading, FontId::proportional(28.0)),
+            (egui::TextStyle::Body, FontId::proportional(14.0)),
+            (egui::TextStyle::Button, FontId::proportional(14.0)),
+            (egui::TextStyle::Small, FontId::proportional(12.0)),
+            (egui::TextStyle::Monospace, FontId::monospace(13.0)),
+        ]
+        .into(),
+        visuals: theme.default_visuals(),
+        ..Default::default()
+    };
     style.spacing.item_spacing = vec2(10.0, 10.0);
     style.spacing.button_padding = vec2(14.0, 9.0);
     style.spacing.interact_size = vec2(40.0, 36.0);
     style.spacing.combo_height = 360.0;
     style.spacing.slider_rail_height = 4.0;
-    style.visuals = egui::Visuals::dark();
     let v = &mut style.visuals;
-    v.override_text_color = Some(TEXT);
-    v.weak_text_color = Some(MUTED);
-    v.panel_fill = BACKGROUND;
-    v.window_fill = SURFACE;
-    v.extreme_bg_color = BACKGROUND;
-    v.text_edit_bg_color = Some(INPUT);
-    v.faint_bg_color = INPUT;
-    v.window_stroke = Stroke::new(1.0_f32, BORDER);
+    v.override_text_color = Some(colors.text);
+    v.weak_text_color = Some(colors.muted);
+    v.panel_fill = colors.background;
+    v.window_fill = colors.surface;
+    v.extreme_bg_color = colors.background;
+    v.text_edit_bg_color = Some(colors.input);
+    v.faint_bg_color = colors.input;
+    v.window_stroke = Stroke::new(1.0_f32, colors.border);
     v.window_corner_radius = 12.into();
     v.menu_corner_radius = 10.into();
-    v.selection.bg_fill = ACCENT_DIM;
-    v.selection.stroke = Stroke::new(1.0_f32, ACCENT);
-    v.hyperlink_color = ACCENT;
-    v.warn_fg_color = ACCENT;
-    v.error_fg_color = RED;
+    v.selection.bg_fill = colors.accent_dim;
+    v.selection.stroke = Stroke::new(1.0_f32, colors.accent);
+    v.hyperlink_color = colors.accent;
+    v.warn_fg_color = colors.accent;
+    v.error_fg_color = colors.red;
     v.slider_trailing_fill = true;
     v.interact_cursor = Some(egui::CursorIcon::PointingHand);
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, BORDER);
-    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, TEXT);
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, colors.border);
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, colors.text);
     for widget in [
         &mut v.widgets.inactive,
         &mut v.widgets.hovered,
         &mut v.widgets.active,
     ] {
         widget.corner_radius = 7.into();
-        widget.bg_fill = INPUT;
-        widget.weak_bg_fill = INPUT;
-        widget.bg_stroke = Stroke::new(1.0_f32, BORDER);
-        widget.fg_stroke = Stroke::new(1.5_f32, TEXT);
+        widget.bg_fill = colors.input;
+        widget.weak_bg_fill = colors.input;
+        widget.bg_stroke = Stroke::new(1.0_f32, colors.border);
+        widget.fg_stroke = Stroke::new(1.5_f32, colors.text);
     }
-    v.widgets.hovered.bg_fill = Color32::from_rgb(45, 48, 55);
+    v.widgets.hovered.bg_fill = colors.hover;
     v.widgets.hovered.weak_bg_fill = v.widgets.hovered.bg_fill;
-    v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, MUTED);
-    v.widgets.active.bg_stroke = Stroke::new(1.0_f32, ACCENT);
-    v.widgets.active.fg_stroke = Stroke::new(1.5_f32, TEXT);
-    ctx.set_style(style);
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, colors.muted);
+    v.widgets.active.bg_stroke = Stroke::new(1.0_f32, colors.accent);
+    v.widgets.active.fg_stroke = Stroke::new(1.5_f32, colors.text);
+    style
 }
 
-pub fn card() -> egui::Frame {
+pub fn card(ui: &Ui) -> egui::Frame {
+    let colors = palette(ui);
     egui::Frame::new()
-        .fill(SURFACE)
-        .stroke(Stroke::new(1.0_f32, BORDER))
+        .fill(colors.surface)
+        .stroke(Stroke::new(1.0_f32, colors.border))
         .corner_radius(14)
         .inner_margin(22)
 }
 
+pub fn theme_selector(ui: &mut Ui, preference: &mut ThemePreference) -> bool {
+    let previous = *preference;
+    let colors = palette(ui);
+    card(ui).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        subtitle(ui, t("Appearance"));
+        ui.label(
+            RichText::new(t(
+                "Choose a theme. System follows your Windows app mode automatically.",
+            ))
+            .color(colors.muted),
+        );
+        ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            for choice in ThemePreference::ALL {
+                ui.selectable_value(preference, choice, choice.label());
+            }
+        });
+    });
+    *preference != previous
+}
+
 pub fn eyebrow(ui: &mut Ui, label: &str) {
-    ui.label(RichText::new(t(label)).size(10.0).strong().color(MUTED));
+    let colors = palette(ui);
+    ui.label(
+        RichText::new(t(label))
+            .size(10.0)
+            .strong()
+            .color(colors.muted),
+    );
 }
 
 pub fn subtitle(ui: &mut Ui, label: &str) {
@@ -125,6 +250,7 @@ pub enum Icon {
 }
 
 pub fn icon(ui: &Ui, kind: Icon, rect: Rect, color: Color32) {
+    let colors = palette(ui);
     let p = ui.painter();
     let c = rect.center();
     let r = rect.width() * 0.39;
@@ -160,13 +286,14 @@ pub fn icon(ui: &Ui, kind: Icon, rect: Rect, color: Color32) {
             for (i, offset) in [-0.5, 0.5, -0.2].into_iter().enumerate() {
                 let y = c.y + (i as f32 - 1.0) * r * 0.8;
                 p.line_segment([pos2(c.x - r, y), pos2(c.x + r, y)], stroke);
-                p.circle(pos2(c.x + offset * r, y), r * 0.22, SIDEBAR, stroke);
+                p.circle(pos2(c.x + offset * r, y), r * 0.22, colors.sidebar, stroke);
             }
         }
     }
 }
 
 pub fn toggle(ui: &mut Ui, value: &mut bool, label: &str) -> egui::Response {
+    let colors = palette(ui);
     let (rect, mut response) = ui.allocate_exact_size(vec2(40.0, 23.0), egui::Sense::click());
     if response.clicked() {
         *value = !*value;
@@ -176,9 +303,9 @@ pub fn toggle(ui: &mut Ui, value: &mut bool, label: &str) -> egui::Response {
         egui::WidgetInfo::selected(egui::WidgetType::Checkbox, ui.is_enabled(), *value, label)
     });
     let amount = ui.ctx().animate_bool(response.id, *value);
-    let fill = if *value { ACCENT } else { BORDER };
+    let fill = if *value { colors.accent } else { colors.border };
     let stroke = if response.hovered() || response.has_focus() {
-        Stroke::new(1.0_f32, TEXT)
+        Stroke::new(1.0_f32, colors.text)
     } else {
         Stroke::NONE
     };
@@ -187,7 +314,125 @@ pub fn toggle(ui: &mut Ui, value: &mut bool, label: &str) -> egui::Response {
     ui.painter().circle_filled(
         pos2(rect.left() + 11.5 + 17.0 * amount, rect.center().y),
         8.0,
-        if *value { BACKGROUND } else { MUTED },
+        if *value {
+            colors.on_accent
+        } else {
+            colors.muted
+        },
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check_frame(ctx: &egui::Context, system: Option<egui::Theme>, expected: egui::Theme) {
+        let _ = ctx.run(
+            egui::RawInput {
+                system_theme: system,
+                ..Default::default()
+            },
+            |ctx| {
+                assert_eq!(ctx.theme(), expected);
+                let colors = Palette::for_theme(expected);
+                assert_eq!(ctx.style().visuals.panel_fill, colors.background);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    assert_eq!(palette(ui).text, colors.text);
+                    assert_eq!(card(ui).fill, colors.surface);
+                    assert_eq!(ui.visuals().selection.bg_fill, colors.accent_dim);
+                });
+            },
+        );
+    }
+
+    #[test]
+    fn system_changes_and_manual_overrides_update_the_entire_palette() {
+        use egui::Theme::{Dark, Light};
+        let ctx = egui::Context::default();
+        install(&ctx);
+        ThemePreference::System.apply(&ctx);
+        for system in [Light, Dark, Light] {
+            check_frame(&ctx, Some(system), system);
+        }
+        for (preference, expected) in [
+            (ThemePreference::Dark, Dark),
+            (ThemePreference::Light, Light),
+        ] {
+            preference.apply(&ctx);
+            for system in [Dark, Light, Dark] {
+                check_frame(&ctx, Some(system), expected);
+            }
+        }
+        // The latest system theme is used immediately when removing an override.
+        ThemePreference::System.apply(&ctx);
+        assert_eq!(ctx.theme(), Dark);
+        check_frame(&ctx, Some(Light), Light);
+        check_frame(&ctx, None, ctx.options(|o| o.fallback_theme));
+    }
+
+    #[test]
+    fn installation_preserves_saved_preference_and_native_theme_commands() {
+        for (preference, native) in [
+            (ThemePreference::System, egui::SystemTheme::SystemDefault),
+            (ThemePreference::Light, egui::SystemTheme::Light),
+            (ThemePreference::Dark, egui::SystemTheme::Dark),
+        ] {
+            let ctx = egui::Context::default();
+            let output = ctx.run(egui::RawInput::default(), |ctx| {
+                preference.apply(ctx);
+                let selected = ctx.options(|o| o.theme_preference);
+                install(ctx);
+                assert_eq!(ctx.options(|o| o.theme_preference), selected);
+            });
+            assert!(output.viewport_output[&egui::ViewportId::ROOT].commands.iter().any(
+                |command| matches!(command, egui::ViewportCommand::SetTheme(theme) if *theme == native)
+            ));
+        }
+    }
+
+    #[test]
+    fn both_palettes_keep_small_text_and_primary_actions_readable() {
+        fn luminance(color: Color32) -> f32 {
+            let linear = [color.r(), color.g(), color.b()].map(|v| {
+                let v = v as f32 / 255.0;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            });
+            linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
+        }
+        fn contrast(foreground: Color32, background: Color32) {
+            let a = luminance(foreground);
+            let b = luminance(background);
+            let ratio = (a.max(b) + 0.05) / (a.min(b) + 0.05);
+            assert!(
+                ratio >= 4.5,
+                "{foreground:?} on {background:?}: {ratio:.2}:1"
+            );
+        }
+        for theme in [egui::Theme::Light, egui::Theme::Dark] {
+            let colors = Palette::for_theme(theme);
+            for background in [
+                colors.background,
+                colors.sidebar,
+                colors.surface,
+                colors.input,
+            ] {
+                for foreground in [
+                    colors.text,
+                    colors.muted,
+                    colors.accent,
+                    colors.green,
+                    colors.red,
+                ] {
+                    contrast(foreground, background);
+                }
+            }
+            contrast(colors.on_accent, colors.accent);
+            contrast(colors.accent, colors.accent_dim);
+        }
+    }
 }

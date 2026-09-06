@@ -13,6 +13,7 @@ OpenCrate is an independent project. It is not affiliated with, supported or end
 - **Cooling:** available ASUS cooling profiles, manual fan speed, custom temperature curves, Full Blast and other actions for all fans, with restoration and undo controls.
 - **Power:** installed Windows power plans, separate plugged-in and battery processor settings, boost mode, energy preference and undo for the last change.
 - **Desktop integration:** notification-area controls, optional launch at Windows sign-in, optional tray startup and restoration of the last applied lighting settings.
+- **Appearance:** matching light and dark themes with amber accents. Follow Windows app mode automatically (default), or choose **System**, **Light** or **Dark** in **Settings → Appearance**. Changes apply immediately.
 - **Languages:** English (default), Simplified Chinese and Turkish. Change the language in **Settings → Application language**; it applies immediately and is remembered for the next launch.
 
 ## Hardware support
@@ -60,7 +61,7 @@ Fonts, translations and icons are embedded in the executable. No language pack o
 
 ## Settings and application lifetime
 
-Preferences are stored in `%APPDATA%\opencrate\settings.json`. They include `language` (`en`, `zh-CN` or `tr`), tray startup, lighting restoration and the last successfully applied lighting configuration. Existing files without a language field continue to work in English; an unknown language also falls back to English.
+Preferences are stored in `%APPDATA%\opencrate\settings.json`. They include `language` (`en`, `zh-CN` or `tr`), `theme` (`system`, `light` or `dark`), tray startup, lighting restoration and the last successfully applied lighting configuration. Existing files without a language field continue to work in English; an unknown language also falls back to English. Missing or unknown theme values follow Windows app mode. Theme choices are remembered across launches; System mode also follows Windows changes while OpenCrate is running, including in the tray.
 
 Closing the window keeps OpenCrate running in the tray. Choose **Show OpenCrate** to reopen it or **Quit** to exit.
 
