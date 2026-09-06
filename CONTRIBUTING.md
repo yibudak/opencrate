@@ -82,7 +82,7 @@ To fix formatting, use `cargo fmt --all` and `python -m ruff format scripts`.
    when it can be tested reliably; avoid tests that merely duplicate implementation.
 3. Keep code, comments and documentation in English. Update `en.json`, `zh-CN.json`
    and `tr.json` together when adding user-visible strings; preserve placeholders
-   and serialized identifiers. See the [translation guide](README.md#contributing-translations).
+   and serialized identifiers. See the [translation guide](rev/REFERENCE.md#contributing-translations).
 4. Run the relevant checks and describe what you tested. Clearly separate mock
    tests from physical hardware observations. Screenshots are useful for UI changes.
 5. Open a PR against `main` and complete its short template. Draft PRs are welcome.
