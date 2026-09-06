@@ -116,7 +116,7 @@ crate versions are reported as warnings because the GUI stack currently needs th
 
 There is one specific advisory exception: [RUSTSEC-2026-0192](https://rustsec.org/advisories/RUSTSEC-2026-0192.html)
 reports the unmaintained `ttf-parser` dependency used through `ab_glyph`/`epaint`.
-There is no patched version. OpenCrate supplies embedded fonts; this is a tracked
+There is no patched version. OpenCrate supplies embedded fonts; this is a
 maintenance limitation tracked in [issue #1](https://github.com/yibudak/opencrate/issues/1),
 not a blanket exception for font vulnerabilities. Review
 and remove the exception when the UI stack moves to a maintained parser. New

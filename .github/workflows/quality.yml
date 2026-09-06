@@ -24,10 +24,15 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
-        with:
-          tool: actionlint@1.7.12
-          fallback: none
+      - name: Install verified actionlint binary
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --location --retry 3 --output actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' 'actionlint.tar.gz' | sha256sum --check
+          mkdir -p actionlint-bin
+          tar -xzf actionlint.tar.gz -C actionlint-bin actionlint
+          echo "$RUNNER_TEMP/actionlint-bin" >> "$GITHUB_PATH"
       - name: Install lint tools
         run: |
           python -m pip install -r scripts/requirements-dev.txt
@@ -83,10 +88,11 @@ jobs:
           shared-key: portable-coverage
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Test platform-independent control logic
-        run: >-
-          cargo llvm-cov --locked --no-default-features --lib
-          -p opencrate-core -p opencrate-aura -p opencrate-fan -p opencrate-power
-          --remap-path-prefix --lcov --output-path target/coverage/lcov.info
+        run: |
+          mkdir -p target/coverage
+          cargo llvm-cov --locked --no-default-features --lib \
+            -p opencrate-core -p opencrate-aura -p opencrate-fan -p opencrate-power \
+            --remap-path-prefix --lcov --output-path target/coverage/lcov.info
       - name: Write coverage summary
         run: cargo llvm-cov report --summary-only | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
