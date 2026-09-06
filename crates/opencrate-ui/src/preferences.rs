@@ -59,6 +59,7 @@ impl SavedLighting {
 pub struct Preferences {
     version: u32,
     pub language: crate::i18n::Language,
+    pub theme: crate::theme::ThemePreference,
     pub restore_lighting: bool,
     pub start_in_tray: bool,
     pub last_lighting: Option<SavedLighting>,
@@ -69,6 +70,7 @@ impl Default for Preferences {
         Self {
             version: 1,
             language: crate::i18n::Language::English,
+            theme: crate::theme::ThemePreference::System,
             restore_lighting: true,
             start_in_tray: true,
             last_lighting: None,
@@ -199,7 +201,39 @@ fn save_atomic(path: &Path, preferences: &Preferences) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::theme::ThemePreference;
     use opencrate_core::{EffectMode, RgbColor};
+
+    #[test]
+    fn theme_migration_and_roundtrip_preserve_existing_preferences() {
+        let legacy = r#"{"version":1,"language":"tr","restore_lighting":false,"start_in_tray":false,"last_lighting":{"mode":"static","color":"123456","speed":1.5,"brightness":42}}"#;
+        let original = Preferences::parse(legacy).unwrap();
+        assert_eq!(original.theme, ThemePreference::System);
+        assert_eq!(Preferences::default().theme, ThemePreference::System);
+        for (code, theme) in [
+            ("system", ThemePreference::System),
+            ("light", ThemePreference::Light),
+            ("dark", ThemePreference::Dark),
+            ("future", ThemePreference::System),
+        ] {
+            let mut json: serde_json::Value = serde_json::from_str(legacy).unwrap();
+            json["theme"] = code.into();
+            let decoded = Preferences::parse(&json.to_string()).unwrap();
+            assert_eq!(
+                decoded,
+                Preferences {
+                    theme,
+                    ..original.clone()
+                }
+            );
+            let saved = serde_json::to_value(&decoded).unwrap();
+            assert_eq!(
+                saved["theme"],
+                if code == "future" { "system" } else { code }
+            );
+            assert_eq!(Preferences::parse(&saved.to_string()).unwrap(), decoded);
+        }
+    }
 
     #[test]
     fn language_migration_preserves_existing_hardware_preferences() {
@@ -282,6 +316,16 @@ mod tests {
             Store::load_path(path.clone()).preferences.language,
             crate::i18n::Language::Chinese
         );
+        for theme in ThemePreference::ALL {
+            store.preferences.theme = theme;
+            store.changed();
+            store.flush();
+            assert!(store.error.is_none());
+            assert_eq!(
+                Store::load_path(path.clone()).preferences,
+                store.preferences
+            );
+        }
         fs::write(&path, "broken settings").unwrap();
         let broken = Store::load_path(path.clone());
         assert!(broken.error.is_some());

@@ -1,4 +1,9 @@
 {
+  "Appearance": "Appearance",
+  "Choose a theme. System follows your Windows app mode automatically.": "Choose a theme. System follows your Windows app mode automatically.",
+  "System": "System",
+  "Light": "Light",
+  "Dark": "Dark",
   "READY": "READY",
   "APPLYING": "APPLYING",
   "APPLIED": "APPLIED",

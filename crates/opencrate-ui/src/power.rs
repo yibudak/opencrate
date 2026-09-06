@@ -78,7 +78,7 @@ impl State {
             busy: false,
         }
     }
-    pub fn status(&self) -> (&str, String, egui::Color32) {
+    pub fn status(&self, colors: Palette) -> (&str, String, egui::Color32) {
         if let Some(error) = &self.error {
             (
                 t("UNAVAILABLE"),
@@ -86,14 +86,14 @@ impl State {
                     "Power control failed: {details}",
                     &[("details", t(error).to_string())],
                 ),
-                RED,
+                colors.red,
             )
         } else if self.busy {
-            (t("APPLYING"), self.message.render(), ACCENT)
+            (t("APPLYING"), self.message.render(), colors.accent)
         } else if self.action_error {
-            (t("NEEDS ATTENTION"), self.message.render(), RED)
+            (t("NEEDS ATTENTION"), self.message.render(), colors.red)
         } else {
-            (t("POWER"), self.message.render(), GREEN)
+            (t("POWER"), self.message.render(), colors.green)
         }
     }
     pub fn poll(&mut self) {
@@ -169,6 +169,7 @@ impl State {
         }
     }
     pub fn show(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         page_header(
             ui,
             t("Power"),
@@ -180,11 +181,15 @@ impl State {
             } else {
                 t("WINDOWS CONNECTED")
             },
-            if self.error.is_some() { RED } else { GREEN },
+            if self.error.is_some() {
+                colors.red
+            } else {
+                colors.green
+            },
         );
         if let Some(error) = &self.error {
             ui.colored_label(
-                RED,
+                colors.red,
                 i18n::f("Details: {details}", &[("details", t(error).to_string())]),
             );
             if ui
@@ -202,7 +207,7 @@ impl State {
         };
         let enabled = !self.busy && self.error.is_none();
         let mut command = None;
-        card().inner_margin(18).show(ui, |ui| {
+        card(ui).inner_margin(18).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = 6.0;
             ui.horizontal_wrapped(|ui| {
@@ -216,7 +221,7 @@ impl State {
                             t("ON BATTERY")
                         }
                     }),
-                    GREEN,
+                    colors.green,
                 );
                 if let Some(percent) = snapshot.battery_percent {
                     ui.label(
@@ -224,7 +229,7 @@ impl State {
                             "Battery {percent}%",
                             &[("percent", percent.to_string())],
                         ))
-                        .color(MUTED)
+                        .color(colors.muted)
                         .size(12.0),
                     );
                 }
@@ -262,11 +267,15 @@ impl State {
                     let exists = snapshot.plans.iter().any(|p| p.id == id);
                     let active = snapshot.active == id;
                     let button = egui::Button::new(RichText::new(label).color(if active {
-                        ACCENT
+                        colors.accent
                     } else {
-                        TEXT
+                        colors.text
                     }))
-                    .fill(if active { ACCENT_DIM } else { INPUT })
+                    .fill(if active {
+                        colors.accent_dim
+                    } else {
+                        colors.input
+                    })
                     .min_size(vec2(116.0, 36.0));
                     if ui
                         .add_enabled(enabled && exists, button)
@@ -330,13 +339,13 @@ impl State {
             });
         });
         ui.add_space(12.0);
-        card().inner_margin(18).show(ui, |ui| {
+        card(ui).inner_margin(18).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing.y = 6.0;
             ui.horizontal_wrapped(|ui| {
                 subtitle(ui, t("Processor behavior"));
                 let dirty = self.draft.as_ref().is_some_and(|d| d.dirty());
-                badge(ui, if dirty { t("UNAPPLIED CHANGES") } else { t("CURRENT SETTINGS") }, if dirty { ACCENT } else { MUTED });
+                badge(ui, if dirty { t("UNAPPLIED CHANGES") } else { t("CURRENT SETTINGS") }, if dirty { colors.accent } else { colors.muted });
             });
             let old_source = self.source;
             ui.add_enabled_ui(enabled, |ui| {
@@ -348,13 +357,13 @@ impl State {
                         ui.selectable_value(&mut self.source, Source::Ac, t("Plugged in"));
                         ui.selectable_value(&mut self.source, Source::Dc, t("On battery"));
                     }).response.on_hover_text(t("Apply your edits or reload current values before changing the power source."));
-                    ui.label(RichText::new(t("Settings for the active Windows plan")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(t("Settings for the active Windows plan")).size(12.0).color(colors.muted));
                 });
             });
             if old_source != self.source { self.draft = Some(Draft::new(&snapshot, self.source)); }
             let Some(draft) = &mut self.draft else { return; };
             let stale = draft.stale(&snapshot);
-            if stale { ui.colored_label(ACCENT, t("Windows settings changed. Reload current values to continue.")); }
+            if stale { ui.colored_label(colors.accent, t("Windows settings changed. Reload current values to continue.")); }
             ui.add_space(3.0);
             ui.add_enabled_ui(enabled && !stale, |ui| {
                 ui.columns(2, |columns| {
@@ -362,7 +371,7 @@ impl State {
                         if let Some(control) = draft.controls.iter_mut().find(|c| c.key == key) { range(column, control); }
                     }
                 });
-                ui.label(RichText::new(t("These percentages request a processor performance range; they are not watt limits.")).size(12.0).color(MUTED));
+                ui.label(RichText::new(t("These percentages request a processor performance range; they are not watt limits.")).size(12.0).color(colors.muted));
                 ui.add_space(3.0);
                 ui.horizontal_wrapped(|ui| {
                     if let Some(control) = draft.controls.iter_mut().find(|c| c.key == Setting::Boost) {
@@ -381,34 +390,34 @@ impl State {
                 });
                 if let Some(control) = draft.controls.iter_mut().find(|c| c.key == Setting::EnergyPreference) {
                     range(ui, control);
-                    ui.label(RichText::new(t("0% favors performance · 100% favors energy savings")).size(12.0).color(MUTED));
+                    ui.label(RichText::new(t("0% favors performance · 100% favors energy savings")).size(12.0).color(colors.muted));
                 }
             });
             let dirty = draft.dirty();
             let edit = draft.edit();
             let validation = validate(&snapshot.cpu[self.source.index()].controls, &edit);
             if dirty && !stale {
-                if let Err(error) = &validation { ui.colored_label(RED, i18n::f("Details: {details}", &[("details", t(error).to_string())])); }
+                if let Err(error) = &validation { ui.colored_label(colors.red, i18n::f("Details: {details}", &[("details", t(error).to_string())])); }
             }
             ui.add_space(5.0);
             let mut reload = false;
             ui.horizontal_wrapped(|ui| {
-                if ui.add_enabled(enabled && dirty && !stale && validation.is_ok(), egui::Button::new(RichText::new(t("Apply processor settings")).color(BACKGROUND).strong()).fill(ACCENT)).clicked() {
+                if ui.add_enabled(enabled && dirty && !stale && validation.is_ok(), egui::Button::new(RichText::new(t("Apply processor settings")).color(colors.on_accent).strong()).fill(colors.accent)).clicked() {
                     command = Some(Command::Apply(edit));
                 }
                 if ui.add_enabled(enabled && (dirty || stale), egui::Button::new(t("Reload current values"))).clicked() { reload = true; }
             });
             if reload { self.draft = Some(Draft::new(&snapshot, self.source)); }
-            for error in &snapshot.cpu[self.source.index()].unavailable { ui.label(RichText::new(error).size(12.0).color(MUTED)); }
+            for error in &snapshot.cpu[self.source.index()].unavailable { ui.label(RichText::new(error).size(12.0).color(colors.muted)); }
         });
         ui.add_space(8.0);
-        ui.label(RichText::new(t("Power settings stay active after quitting OpenCrate and restarting Windows. Undo is available for the last change in this session.")).size(12.0).color(MUTED));
+        ui.label(RichText::new(t("Power settings stay active after quitting OpenCrate and restarting Windows. Undo is available for the last change in this session.")).size(12.0).color(colors.muted));
         ui.label(
             RichText::new(t(
                 "Windows power mode and firmware can influence the resulting CPU behavior.",
             ))
             .size(12.0)
-            .color(MUTED),
+            .color(colors.muted),
         );
         if let Some(command) = command {
             self.send(command);

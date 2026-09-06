@@ -148,6 +148,7 @@ impl App {
         mut instance: windows_startup::Instance,
     ) -> std::io::Result<Self> {
         i18n::set_language(store.preferences.language);
+        store.preferences.theme.apply(ctx);
         let window = window_activation::WindowActivation::new(ctx, native_window)?;
         let activate = window.clone();
         instance.listen(move || activate.show())?;
