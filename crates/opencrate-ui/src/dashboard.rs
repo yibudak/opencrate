@@ -31,12 +31,12 @@ pub enum Activity {
 }
 
 impl Activity {
-    fn presentation(self) -> (&'static str, Color32) {
+    fn presentation(self, colors: Palette) -> (&'static str, Color32) {
         match self {
-            Self::Ready => (t("READY"), MUTED),
-            Self::Applying => (t("APPLYING"), ACCENT),
-            Self::Applied => (t("APPLIED"), GREEN),
-            Self::Error => (t("NEEDS ATTENTION"), RED),
+            Self::Ready => (t("READY"), colors.muted),
+            Self::Applying => (t("APPLYING"), colors.accent),
+            Self::Applied => (t("APPLIED"), colors.green),
+            Self::Error => (t("NEEDS ATTENTION"), colors.red),
         }
     }
 }
@@ -47,6 +47,7 @@ pub struct State {
     pub hex: String,
     timeline: Timeline,
     previous_frame: Instant,
+    system_theme: Option<egui::Theme>,
 }
 
 impl State {
@@ -74,35 +75,46 @@ impl State {
             hex: color.to_hex(),
             timeline: Timeline::default(),
             previous_frame: Instant::now(),
+            system_theme: ctx.system_theme(),
         }
     }
 }
 
 impl App {
     pub fn render_dashboard(&mut self, ctx: &egui::Context) {
+        if self.ui.system_theme != ctx.system_theme() {
+            self.ui.system_theme = ctx.system_theme();
+            // Windows also rethemes the title bar when its app mode changes.
+            self.store.preferences.theme.apply(ctx);
+        }
+        let colors = Palette::for_theme(ctx.theme());
         self.sidebar(ctx);
         egui::TopBottomPanel::bottom("application_status")
             .frame(
                 egui::Frame::new()
-                    .fill(SIDEBAR)
+                    .fill(colors.sidebar)
                     .inner_margin(egui::Margin::symmetric(28, 14)),
             )
             .show(ctx, |ui| {
                 let (label, status, color) = if self.ui.page == Page::Fans {
-                    self.fans.status()
+                    self.fans.status(colors)
                 } else if self.ui.page == Page::Power {
-                    self.power.status()
+                    self.power.status(colors)
                 } else {
-                    let (label, color) = self.activity.presentation();
+                    let (label, color) = self.activity.presentation(colors);
                     (label, self.lighting_status(), color)
                 };
                 ui.horizontal_wrapped(|ui| {
                     badge(ui, label, color);
-                    ui.label(RichText::new(status).size(12.0).color(if color == RED {
-                        RED
-                    } else {
-                        MUTED
-                    }));
+                    ui.label(
+                        RichText::new(status)
+                            .size(12.0)
+                            .color(if color == colors.red {
+                                colors.red
+                            } else {
+                                colors.muted
+                            }),
+                    );
                 });
                 if self.ui.page != Page::Settings {
                     for error in [&self.store.error, &self.startup_error]
@@ -110,14 +122,14 @@ impl App {
                         .flatten()
                     {
                         ui.colored_label(
-                            RED,
+                            colors.red,
                             i18n::f("Details: {details}", &[("details", t(error).to_string())]),
                         );
                     }
                 }
             });
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(28))
+            .frame(egui::Frame::new().fill(colors.background).inner_margin(28))
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .id_salt(("page", self.ui.page as u8))
@@ -135,10 +147,11 @@ impl App {
     }
 
     fn sidebar(&mut self, ctx: &egui::Context) {
+        let colors = Palette::for_theme(ctx.theme());
         egui::SidePanel::left("navigation")
             .exact_width(192.0)
             .resizable(false)
-            .frame(egui::Frame::new().fill(SIDEBAR).inner_margin(16))
+            .frame(egui::Frame::new().fill(colors.sidebar).inner_margin(16))
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -148,7 +161,11 @@ impl App {
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 1.0;
                         ui.label(RichText::new("OpenCrate").size(20.0).strong());
-                        ui.label(RichText::new(t("HARDWARE CONTROL")).size(8.0).color(MUTED));
+                        ui.label(
+                            RichText::new(t("HARDWARE CONTROL"))
+                                .size(8.0)
+                                .color(colors.muted),
+                        );
                     });
                 });
                 ui.add_space(34.0);
@@ -161,37 +178,16 @@ impl App {
                     ui.label(
                         RichText::new(format!("{} {}", t("VERSION"), env!("CARGO_PKG_VERSION")))
                             .size(10.0)
-                            .color(MUTED),
+                            .color(colors.muted),
                     );
                     ui.add_space(12.0);
                     self.nav_item(ui, Page::Settings, t("Settings"), Icon::Settings, false);
-                    ui.add_space(18.0);
-                    egui::Frame::new()
-                        .fill(SURFACE)
-                        .corner_radius(10)
-                        .inner_margin(14)
-                        .show(ui, |ui| {
-                            ui.set_width(ui.available_width());
-                            ui.allocate_ui_with_layout(
-                                vec2(ui.available_width(), 82.0),
-                                Layout::top_down(Align::Min),
-                                |ui| {
-                                    eyebrow(ui, t("RGB · FANS · POWER"));
-                                    ui.label(
-                                        RichText::new(t(
-                                            "An open-source alternative to Armoury Crate.",
-                                        ))
-                                        .size(13.0)
-                                        .strong(),
-                                    );
-                                },
-                            );
-                        });
                 });
             });
     }
 
     fn nav_item(&mut self, ui: &mut Ui, page: Page, label: &str, symbol: Icon, soon: bool) {
+        let colors = palette(ui);
         let label = t(label);
         let selected = self.ui.page == page;
         let (rect, response) =
@@ -200,19 +196,23 @@ impl App {
             egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, label)
         });
         let color = if selected {
-            ACCENT
+            colors.accent
         } else if response.hovered() {
-            TEXT
+            colors.text
         } else {
-            MUTED
+            colors.muted
         };
         if selected || response.hovered() || response.has_focus() {
             ui.painter().rect(
                 rect,
                 8,
-                if selected { ACCENT_DIM } else { INPUT },
+                if selected {
+                    colors.accent_dim
+                } else {
+                    colors.input
+                },
                 if response.has_focus() {
-                    Stroke::new(1.0_f32, ACCENT)
+                    Stroke::new(1.0_f32, colors.accent)
                 } else {
                     Stroke::NONE
                 },
@@ -223,7 +223,7 @@ impl App {
             ui.painter().rect_filled(
                 Rect::from_min_size(rect.left_center() + vec2(0.0, -9.0), vec2(3.0, 18.0)),
                 2,
-                ACCENT,
+                colors.accent,
             );
         }
         icon(
@@ -245,7 +245,7 @@ impl App {
                 egui::Align2::RIGHT_CENTER,
                 t("SOON"),
                 FontId::proportional(8.0),
-                MUTED,
+                colors.muted,
             );
         }
         if response.clicked() {
@@ -254,12 +254,13 @@ impl App {
     }
 
     fn lighting_page(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         page_header(
             ui,
             t("Lighting"),
             t("Set the mood for your entire setup."),
             t("SYNC"),
-            ACCENT,
+            colors.accent,
         );
         self.preview_card(ui);
         ui.add_space(8.0);
@@ -280,10 +281,14 @@ impl App {
             if ui
                 .add_enabled(
                     enabled,
-                    egui::Button::new(RichText::new(t("Apply changes")).strong().color(BACKGROUND))
-                        .fill(ACCENT)
-                        .stroke(Stroke::NONE)
-                        .min_size(vec2(162.0, 42.0)),
+                    egui::Button::new(
+                        RichText::new(t("Apply changes"))
+                            .strong()
+                            .color(colors.on_accent),
+                    )
+                    .fill(colors.accent)
+                    .stroke(Stroke::NONE)
+                    .min_size(vec2(162.0, 42.0)),
                 )
                 .clicked()
             {
@@ -314,16 +319,17 @@ impl App {
                 })
                 .size(12.0)
                 .color(if pending || !valid_color {
-                    ACCENT
+                    colors.accent
                 } else {
-                    MUTED
+                    colors.muted
                 }),
             );
         });
     }
 
     fn effect_card(&mut self, ui: &mut Ui) {
-        card().show(ui, |ui| {
+        let colors = palette(ui);
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_min_height(255.0);
             subtitle(ui, t("Effect & color"));
@@ -338,7 +344,7 @@ impl App {
                 });
             ui.allocate_ui_with_layout(vec2(ui.available_width(), 34.0), Layout::top_down(Align::Min), |ui| {
                 ui.set_min_height(34.0);
-                ui.label(RichText::new(effect_description(self.mode)).size(12.0).color(MUTED));
+                ui.label(RichText::new(effect_description(self.mode)).size(12.0).color(colors.muted));
             });
             ui.add_space(2.0);
             ui.separator();
@@ -353,7 +359,7 @@ impl App {
                             self.ui.hex = self.color.to_hex();
                         }
                     });
-                    ui.label(RichText::new("#").monospace().color(MUTED));
+                    ui.label(RichText::new("#").monospace().color(colors.muted));
                     let response = ui.add(egui::TextEdit::singleline(&mut self.ui.hex)
                         .id_salt("hex_color").font(egui::TextStyle::Monospace)
                         .desired_width(92.0).char_limit(7).hint_text("RRGGBB"));
@@ -365,7 +371,7 @@ impl App {
                     if response.lost_focus() && self.ui.hex.parse::<RgbColor>().is_ok() {
                         self.ui.hex = self.color.to_hex();
                     }
-                    ui.label(RichText::new(t("HEX")).size(10.0).color(MUTED));
+                    ui.label(RichText::new(t("HEX")).size(10.0).color(colors.muted));
                 });
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 8.0;
@@ -380,9 +386,9 @@ impl App {
                         response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton,
                             true, self.color == color, label));
                         if self.color == color || response.hovered() || response.has_focus() {
-                            ui.painter().circle_stroke(rect.center(), 13.0, Stroke::new(1.0_f32, TEXT));
+                            ui.painter().circle_stroke(rect.center(), 13.0, Stroke::new(1.0_f32, colors.text));
                         }
-                        ui.painter().circle_filled(rect.center(), 9.0, Color32::from_rgb(rgb[0], rgb[1], rgb[2]));
+                        ui.painter().circle(rect.center(), 9.0, Color32::from_rgb(rgb[0], rgb[1], rgb[2]), Stroke::new(0.75_f32, colors.border));
                         if response.on_hover_text(label).clicked() {
                             self.color = color;
                             self.ui.hex = color.to_hex();
@@ -394,15 +400,16 @@ impl App {
                 ui.label(RichText::new(if self.mode == EffectMode::Off { t("Lights out") } else { t("Automatic palette") }).strong());
                 ui.label(RichText::new(if self.mode == EffectMode::Off {
                     t("Choose another effect to bring your lighting back.")
-                } else { t("This effect creates its own colors. Adjust its brightness and speed to make it yours.") }).size(13.0).color(MUTED));
+                } else { t("This effect creates its own colors. Adjust its brightness and speed to make it yours.") }).size(13.0).color(colors.muted));
             }
         });
     }
 
     fn adjustments_card(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         let mut brightness_changed = false;
         let mut speed_changed = false;
-        card().show(ui, |ui| {
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.set_min_height(255.0);
             ui.spacing_mut().interact_size.y = 22.0;
@@ -411,7 +418,7 @@ impl App {
             ui.add_enabled_ui(self.mode != EffectMode::Off, |ui| {
                 value_heading(ui, t("Brightness"), &format!("{}%", self.brightness));
                 ui.spacing_mut().slider_width = ui.available_width();
-                ui.visuals_mut().selection.bg_fill = ACCENT;
+                ui.visuals_mut().selection.bg_fill = colors.accent;
                 let response =
                     ui.add(egui::Slider::new(&mut self.brightness, 0..=100).show_value(false));
                 response.widget_info(|| {
@@ -423,7 +430,7 @@ impl App {
                 });
                 brightness_changed = response.changed();
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(t("Dim")).size(11.0).color(MUTED));
+                    ui.label(RichText::new(t("Dim")).size(11.0).color(colors.muted));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui.small_button(t("Reset to 100%")).clicked() {
                             self.brightness = 100;
@@ -436,7 +443,7 @@ impl App {
             ui.add_enabled_ui(is_animated(self.mode), |ui| {
                 value_heading(ui, t("Animation speed"), &format!("{:.2}×", self.speed));
                 ui.spacing_mut().slider_width = ui.available_width();
-                ui.visuals_mut().selection.bg_fill = ACCENT;
+                ui.visuals_mut().selection.bg_fill = colors.accent;
                 let response = ui.add(
                     egui::Slider::new(&mut self.speed, MIN_SPEED..=MAX_SPEED)
                         .logarithmic(true)
@@ -447,7 +454,7 @@ impl App {
                 });
                 speed_changed = response.changed();
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("0.25× — 4×").size(11.0).color(MUTED));
+                    ui.label(RichText::new("0.25× — 4×").size(11.0).color(colors.muted));
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui.small_button(t("Reset to 1×")).clicked() {
                             self.speed = 1.0;
@@ -465,7 +472,7 @@ impl App {
                     t("Changes are live after Apply. Effects keep running in the tray.")
                 })
                 .size(11.0)
-                .color(MUTED),
+                .color(colors.muted),
             );
         });
         if brightness_changed || speed_changed {
@@ -482,24 +489,25 @@ impl App {
     }
 
     fn settings_page(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         page_header(
             ui,
             t("Settings"),
             t("Make OpenCrate fit your routine."),
             t("PREFERENCES"),
-            MUTED,
+            colors.muted,
         );
         let mut autostart = self.autostart;
         let mut preferences_changed = false;
         let mut language = self.store.preferences.language;
-        card().show(ui, |ui| {
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             subtitle(ui, t("Application language"));
             ui.label(
                 RichText::new(t(
                     "Choose the display language. Changes take effect immediately.",
                 ))
-                .color(MUTED),
+                .color(colors.muted),
             );
             ui.add_space(8.0);
             egui::ComboBox::from_id_salt("application_language")
@@ -515,7 +523,12 @@ impl App {
             self.change_language(language, ui.ctx());
         }
         ui.add_space(12.0);
-        card().show(ui, |ui| {
+        if theme_selector(ui, &mut self.store.preferences.theme) {
+            self.store.preferences.theme.apply(ui.ctx());
+            preferences_changed = true;
+        }
+        ui.add_space(12.0);
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             subtitle(ui, t("Startup & restore"));
             ui.add_space(8.0);
@@ -559,7 +572,7 @@ impl App {
                 ui.label(
                     RichText::new(t("Enable Launch with Windows to use Start in the tray."))
                         .size(12.0)
-                        .color(MUTED),
+                        .color(colors.muted),
                 );
             }
         });
@@ -568,13 +581,13 @@ impl App {
             ui.ctx().request_repaint_after(Duration::from_millis(400));
         }
         ui.add_space(8.0);
-        card().show(ui, |ui| {
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             subtitle(ui, t("Close to tray"));
-            ui.label(RichText::new(t("Closing the window keeps lighting and fan control running. Use Show OpenCrate in the tray menu to return, or Quit to exit.")).color(MUTED));
+            ui.label(RichText::new(t("Closing the window keeps lighting and fan control running. Use Show OpenCrate in the tray menu to return, or Quit to exit.")).color(colors.muted));
             ui.add_space(2.0);
-            ui.label(RichText::new(t("When you quit, lighting switches to a built-in effect. Dimmed multicolor animations remain as a static color.")).size(12.0).color(MUTED));
-            ui.label(RichText::new(t("Fan changes are temporary. Quit restores the curves that were active before your changes; fan settings are not restored on Windows startup.")).size(12.0).color(MUTED));
+            ui.label(RichText::new(t("When you quit, lighting switches to a built-in effect. Dimmed multicolor animations remain as a static color.")).size(12.0).color(colors.muted));
+            ui.label(RichText::new(t("Fan changes are temporary. Quit restores the curves that were active before your changes; fan settings are not restored on Windows startup.")).size(12.0).color(colors.muted));
         });
         ui.add_space(14.0);
         subtitle(ui, t("About"));
@@ -586,21 +599,21 @@ impl App {
                 ui.label(
                     RichText::new(t("An open-source alternative to Armoury Crate. RGB lighting, fan and power controls."))
                         .size(12.0)
-                        .color(MUTED),
+                        .color(colors.muted),
                 );
             });
         });
         ui.label(
             RichText::new(t("OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS."))
                 .size(12.0)
-                .color(MUTED),
+                .color(colors.muted),
         );
         for error in [&self.startup_error, &self.store.error]
             .into_iter()
             .flatten()
         {
             ui.colored_label(
-                RED,
+                colors.red,
                 i18n::f("Details: {details}", &[("details", t(error).to_string())]),
             );
         }
@@ -614,12 +627,13 @@ impl App {
     }
 
     fn preview_card(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         let now = Instant::now();
         self.ui
             .timeline
             .advance(now - self.ui.previous_frame, self.speed);
         self.ui.previous_frame = now;
-        card().show(ui, |ui| {
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             let (rect, _) =
                 ui.allocate_exact_size(vec2(ui.available_width(), 158.0), egui::Sense::hover());
@@ -655,13 +669,13 @@ impl App {
                         )
                     })
                     .size(13.0)
-                    .color(MUTED),
+                    .color(colors.muted),
                 );
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new(t("Choose an effect, then apply it to your lights."))
                         .size(12.0)
-                        .color(MUTED),
+                        .color(colors.muted),
                 );
             });
             let mut leds = [RgbColor::BLACK; 48];
@@ -678,7 +692,7 @@ impl App {
                 p.circle_stroke(
                     center,
                     radius,
-                    Stroke::new(1.0_f32, BORDER.gamma_multiply(0.6)),
+                    Stroke::new(1.0_f32, colors.border.gamma_multiply(0.6)),
                 );
             }
             // Keep changing LEDs in their own mesh so the software renderer can
@@ -702,21 +716,21 @@ impl App {
                 ));
                 led_painter.circle_filled(position, 11.0, color.gamma_multiply(0.07));
                 led_painter.circle_filled(position, 6.5, color.gamma_multiply(0.15));
-                led_painter.circle(position, 3.2, color, Stroke::new(0.5_f32, BORDER));
+                led_painter.circle(position, 3.2, color, Stroke::new(0.5_f32, colors.border));
             }
             p.text(
                 center - vec2(0.0, 8.0),
                 egui::Align2::CENTER_CENTER,
                 t("SYNC"),
                 FontId::proportional(14.0),
-                TEXT,
+                colors.text,
             );
             p.text(
                 center + vec2(0.0, 13.0),
                 egui::Align2::CENTER_CENTER,
                 t("ALL LIGHTS"),
                 FontId::proportional(8.0),
-                MUTED,
+                colors.muted,
             );
         });
         // Keep this decorative preview at 20 Hz. Hardware playback has its own
@@ -732,11 +746,12 @@ impl App {
 }
 
 pub(crate) fn page_header(ui: &mut Ui, title: &str, description: &str, tag: &str, color: Color32) {
+    let colors = palette(ui);
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 5.0;
             ui.heading(RichText::new(t(title)).strong());
-            ui.label(RichText::new(t(description)).color(MUTED));
+            ui.label(RichText::new(t(description)).color(colors.muted));
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             badge(ui, tag, color)
@@ -746,15 +761,17 @@ pub(crate) fn page_header(ui: &mut Ui, title: &str, description: &str, tag: &str
 }
 
 fn value_heading(ui: &mut Ui, label: &str, value: &str) {
+    let colors = palette(ui);
     ui.horizontal(|ui| {
         ui.label(t(label));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.label(RichText::new(value).monospace().color(ACCENT));
+            ui.label(RichText::new(value).monospace().color(colors.accent));
         });
     });
 }
 
 fn setting_row(ui: &mut Ui, title: &str, description: &str, value: &mut bool) -> bool {
+    let colors = palette(ui);
     let mut changed = false;
     ui.horizontal(|ui| {
         let text_width = ui.available_width() - 60.0;
@@ -762,7 +779,7 @@ fn setting_row(ui: &mut Ui, title: &str, description: &str, value: &mut bool) ->
             ui.set_min_width(text_width);
             ui.spacing_mut().item_spacing.y = 5.0;
             ui.label(RichText::new(t(title)).strong());
-            ui.label(RichText::new(t(description)).size(13.0).color(MUTED));
+            ui.label(RichText::new(t(description)).size(13.0).color(colors.muted));
         });
         changed = toggle(ui, value, t(title)).changed();
     });

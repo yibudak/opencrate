@@ -79,7 +79,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn status(&self) -> (&str, String, egui::Color32) {
+    pub fn status(&self, colors: Palette) -> (&str, String, egui::Color32) {
         if let Some(error) = &self.error {
             (
                 t("OFFLINE"),
@@ -87,14 +87,14 @@ impl State {
                     "Fan control failed: {details}",
                     &[("details", t(error).to_string())],
                 ),
-                RED,
+                colors.red,
             )
         } else if self.busy {
-            (t("APPLYING"), self.message.render(), ACCENT)
+            (t("APPLYING"), self.message.render(), colors.accent)
         } else if self.action_error {
-            (t("NEEDS ATTENTION"), self.message.render(), RED)
+            (t("NEEDS ATTENTION"), self.message.render(), colors.red)
         } else {
-            (t("FANS"), self.message.render(), GREEN)
+            (t("FANS"), self.message.render(), colors.green)
         }
     }
     pub fn new(ctx: &egui::Context) -> Self {
@@ -198,6 +198,7 @@ impl State {
     }
 
     pub fn show(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         page_header(
             ui,
             t("Fans"),
@@ -209,14 +210,18 @@ impl State {
             } else {
                 t("ASUS CONNECTED")
             },
-            if self.error.is_some() { RED } else { GREEN },
+            if self.error.is_some() {
+                colors.red
+            } else {
+                colors.green
+            },
         );
         if let Some(error) = &self.error {
-            card().show(ui, |ui| {
+            card(ui).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 subtitle(ui, t("Fan service unavailable"));
-                ui.colored_label(RED, i18n::f("Details: {details}", &[("details", t(error).to_string())]));
-                ui.label(RichText::new(t("OpenCrate uses the installed ASUS fan service. Previous readings are paused until it responds.")).color(MUTED));
+                ui.colored_label(colors.red, i18n::f("Details: {details}", &[("details", t(error).to_string())]));
+                ui.label(RichText::new(t("OpenCrate uses the installed ASUS fan service. Previous readings are paused until it responds.")).color(colors.muted));
             });
             if ui
                 .add_enabled(!self.busy, egui::Button::new(t("Retry connection")))
@@ -268,15 +273,15 @@ impl State {
         };
         let enabled = self.error.is_none() && !self.busy && fan.writable;
         if !fan.writable {
-            ui.colored_label(RED, t("This fan uses an unsupported curve or RPM control mode. Readings remain available."));
+            ui.colored_label(colors.red, t("This fan uses an unsupported curve or RPM control mode. Readings remain available."));
         }
         let mut command = None;
-        card().show(ui, |ui| {
+        card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 subtitle(ui, t(&fan.name));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(RichText::new(if self.error.is_none() { i18n::f("{duty}% output", &[("duty", format!("{:.0}", percent(fan.duty)))]) } else { t("Reading paused").into() }).color(ACCENT));
+                    ui.label(RichText::new(if self.error.is_none() { i18n::f("{duty}% output", &[("duty", format!("{:.0}", percent(fan.duty)))]) } else { t("Reading paused").into() }).color(colors.accent));
                 });
             });
             ui.add_space(6.0);
@@ -302,7 +307,7 @@ impl State {
                         ui.add_space(8.0);
                         ui.horizontal(|ui| {
                             ui.label(t("Fan speed"));
-                            ui.label(RichText::new(format!("{}%", draft.duty)).color(ACCENT).strong());
+                            ui.label(RichText::new(format!("{}%", draft.duty)).color(colors.accent).strong());
                         });
                         ui.spacing_mut().slider_width = ui.available_width() - 8.0;
                         let response = ui.scope(|ui| {
@@ -310,10 +315,10 @@ impl State {
                             ui.add(egui::Slider::new(&mut draft.duty, (percent(fan.minimum).ceil() as u8)..=100).show_value(false))
                         }).inner;
                         response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(draft.duty), t("Fan speed")));
-                        ui.label(RichText::new(i18n::f("Holds the selected speed at lower temperatures, then rises to 100% at {temperature} °C.", &[("temperature", critical_temperature(&fan.curve).to_string())])).small().color(MUTED));
+                        ui.label(RichText::new(i18n::f("Holds the selected speed at lower temperatures, then rises to 100% at {temperature} °C.", &[("temperature", critical_temperature(&fan.curve).to_string())])).small().color(colors.muted));
                     },
                     Mode::Curve => {
-                        ui.label(RichText::new(t("Edit the temperature and speed at each point. Changes apply together.")).small().color(MUTED));
+                        ui.label(RichText::new(t("Edit the temperature and speed at each point. Changes apply together.")).small().color(colors.muted));
                         egui::Grid::new("fan_curve_points").num_columns(3).spacing(vec2(24.0, 6.0)).show(ui, |ui| {
                             eyebrow(ui, t("POINT")); eyebrow(ui, t("TEMPERATURE")); eyebrow(ui, t("FAN SPEED")); ui.end_row();
                             let last = draft.points.len() - 1;
@@ -329,8 +334,8 @@ impl State {
                             }
                         });
                     },
-                    Mode::Current => { ui.label(RichText::new(t("Live controller curve. Choose a mode to make changes.")).color(MUTED)); },
-                    Mode::Profile(_) => { ui.label(RichText::new(t("Temperature-based profile supplied by your ASUS fan controller.")).color(MUTED)); },
+                    Mode::Current => { ui.label(RichText::new(t("Live controller curve. Choose a mode to make changes.")).color(colors.muted)); },
+                    Mode::Profile(_) => { ui.label(RichText::new(t("Temperature-based profile supplied by your ASUS fan controller.")).color(colors.muted)); },
                 }
             });
             ui.add_space(12.0);
@@ -338,16 +343,16 @@ impl State {
             let preview = if draft.mode == Mode::Curve { &draft.points } else { curve.as_ref().unwrap_or(&fan.curve) };
             curve_chart(ui, &fan.curve, preview, if draft.mode == Mode::Manual { 112.0 } else { 140.0 });
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new(t("Preview")).small().color(ACCENT));
-                ui.label(RichText::new(t("Current curve")).small().color(MUTED));
-                ui.label(RichText::new(i18n::f("Minimum manual speed: {duty}%", &[("duty", format!("{:.0}", percent(fan.minimum).ceil()))])).small().color(MUTED));
+                ui.label(RichText::new(t("Preview")).small().color(colors.accent));
+                ui.label(RichText::new(t("Current curve")).small().color(colors.muted));
+                ui.label(RichText::new(i18n::f("Minimum manual speed: {duty}%", &[("duty", format!("{:.0}", percent(fan.minimum).ceil()))])).small().color(colors.muted));
             });
-            if let Err(error) = &curve { ui.colored_label(RED, i18n::f("Details: {details}", &[("details", t(error).to_string())])); }
+            if let Err(error) = &curve { ui.colored_label(colors.red, i18n::f("Details: {details}", &[("details", t(error).to_string())])); }
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 let changed = curve.as_ref().is_ok_and(|c| *c != fan.curve);
                 if ui.add_enabled(enabled && changed && draft.mode != Mode::Current,
-                    egui::Button::new(RichText::new(t("Apply to this fan")).color(BACKGROUND).strong()).fill(ACCENT).min_size(vec2(160.0, 40.0))).clicked() {
+                    egui::Button::new(RichText::new(t("Apply to this fan")).color(colors.on_accent).strong()).fill(colors.accent).min_size(vec2(160.0, 40.0))).clicked() {
                     let target = match draft.mode { Mode::Profile(i) => Target::Profile(i), _ => Target::Custom(curve.clone().unwrap()) };
                     command = Some(Command::Apply { id: fan.id, target });
                 }
@@ -364,12 +369,13 @@ impl State {
         ui.label(
             RichText::new(t("Active in the tray · Original curves restored on Quit"))
                 .small()
-                .color(MUTED),
+                .color(colors.muted),
         );
-        ui.label(RichText::new(t("ASUS fan service required. Output is duty percentage; RPM readings are unavailable.")).small().color(MUTED));
+        ui.label(RichText::new(t("ASUS fan service required. Output is duty percentage; RPM readings are unavailable.")).small().color(colors.muted));
     }
 
     fn quick_controls(&mut self, ui: &mut Ui) {
+        let colors = palette(ui);
         let enabled = self.error.is_none() && !self.busy;
         let full_blast = self
             .fans
@@ -394,9 +400,9 @@ impl State {
                             t("Full Blast")
                         })
                         .strong()
-                        .color(BACKGROUND),
+                        .color(colors.on_accent),
                     )
-                    .fill(ACCENT)
+                    .fill(colors.accent)
                     .min_size(vec2(120.0, 36.0));
                 }
                 let response = ui.add_enabled(
@@ -449,9 +455,21 @@ impl State {
 }
 
 fn fan_tile(ui: &mut Ui, fan: &Fan, selected: bool, live: bool) -> bool {
+    let colors = palette(ui);
     let frame = egui::Frame::new()
-        .fill(if selected { ACCENT_DIM } else { SURFACE })
-        .stroke(Stroke::new(1.0_f32, if selected { ACCENT } else { BORDER }))
+        .fill(if selected {
+            colors.accent_dim
+        } else {
+            colors.surface
+        })
+        .stroke(Stroke::new(
+            1.0_f32,
+            if selected {
+                colors.accent
+            } else {
+                colors.border
+            },
+        ))
         .corner_radius(12)
         .inner_margin(12);
     let result = frame.show(ui, |ui| {
@@ -459,7 +477,16 @@ fn fan_tile(ui: &mut Ui, fan: &Fan, selected: bool, live: bool) -> bool {
         ui.label(RichText::new(t(&fan.name)).size(13.0).strong());
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(vec2(30.0, 30.0), egui::Sense::hover());
-            icon(ui, Icon::Fan, rect, if selected { ACCENT } else { MUTED });
+            icon(
+                ui,
+                Icon::Fan,
+                rect,
+                if selected {
+                    colors.accent
+                } else {
+                    colors.muted
+                },
+            );
             ui.label(
                 RichText::new(if live {
                     format!("{:.0}%", percent(fan.duty))
@@ -488,6 +515,7 @@ fn fan_tile(ui: &mut Ui, fan: &Fan, selected: bool, live: bool) -> bool {
 }
 
 fn curve_chart(ui: &mut Ui, current: &[Point], preview: &[Point], height: f32) {
+    let colors = palette(ui);
     let (rect, _) =
         ui.allocate_exact_size(vec2(ui.available_width(), height), egui::Sense::hover());
     let plot = Rect::from_min_max(rect.min + vec2(34.0, 10.0), rect.max - vec2(16.0, 24.0));
@@ -502,14 +530,14 @@ fn curve_chart(ui: &mut Ui, current: &[Point], preview: &[Point], height: f32) {
         let y = position(0.0, value as f32).y;
         p.line_segment(
             [pos2(plot.left(), y), pos2(plot.right(), y)],
-            Stroke::new(1.0_f32, BORDER),
+            Stroke::new(1.0_f32, colors.border),
         );
         p.text(
             pos2(plot.left() - 8.0, y),
             Align2::RIGHT_CENTER,
             format!("{value}%"),
             FontId::proportional(9.0),
-            MUTED,
+            colors.muted,
         );
     }
     for value in [0, 20, 40, 60, 80, 100] {
@@ -519,10 +547,13 @@ fn curve_chart(ui: &mut Ui, current: &[Point], preview: &[Point], height: f32) {
             Align2::CENTER_CENTER,
             format!("{value}°"),
             FontId::proportional(9.0),
-            MUTED,
+            colors.muted,
         );
     }
-    for (points, color, width) in [(current, MUTED, 1.5_f32), (preview, ACCENT, 2.5_f32)] {
+    for (points, color, width) in [
+        (current, colors.muted, 1.5_f32),
+        (preview, colors.accent, 2.5_f32),
+    ] {
         if points.is_empty() {
             continue;
         }
@@ -539,7 +570,7 @@ fn curve_chart(ui: &mut Ui, current: &[Point], preview: &[Point], height: f32) {
         p.circle_filled(
             position(f32::from(point.temperature), percent(point.duty)),
             4.0,
-            ACCENT,
+            colors.accent,
         );
     }
 }

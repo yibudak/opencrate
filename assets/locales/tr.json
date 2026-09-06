@@ -1,4 +1,9 @@
 {
+  "Appearance": "Görünüm",
+  "Choose a theme. System follows your Windows app mode automatically.": "Bir tema seçin. Sistem, Windows uygulama modunu otomatik olarak izler.",
+  "System": "Sistem",
+  "Light": "Aydınlık",
+  "Dark": "Karanlık",
   "READY": "HAZIR",
   "APPLYING": "UYGULANIYOR",
   "APPLIED": "UYGULANDI",

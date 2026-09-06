@@ -1,4 +1,9 @@
 {
+  "Appearance": "外观",
+  "Choose a theme. System follows your Windows app mode automatically.": "选择主题。“系统”会自动跟随 Windows 应用模式。",
+  "System": "系统",
+  "Light": "浅色",
+  "Dark": "深色",
   "READY": "就绪",
   "APPLYING": "正在应用",
   "APPLIED": "已应用",
