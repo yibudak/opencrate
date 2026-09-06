@@ -1,0 +1,446 @@
+//! OpenCrate hardware control window and tray app.
+//!
+//! Close button hides to tray. Tray menu: Show, presets, Quit.
+//! Lighting uses `opencrate-aura` HID; fans use the ASUS COM service worker.
+
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
+mod dashboard;
+mod fans;
+mod i18n;
+mod power;
+mod preferences;
+mod theme;
+mod window_activation;
+mod windows_startup;
+
+use eframe::egui;
+use i18n::{t, Message};
+use opencrate_aura::{
+    animation::is_animated,
+    playback::{LightingController, Settings},
+};
+use opencrate_core::{EffectMode, RgbColor};
+use std::{
+    sync::mpsc,
+    time::{Duration, Instant},
+};
+use tray_icon::{
+    menu::{Menu, MenuEvent, MenuItem},
+    Icon, TrayIconBuilder,
+};
+
+/// A one-click lighting preset.
+#[derive(Clone, Copy)]
+struct Preset {
+    name: &'static str,
+    mode: EffectMode,
+    color: RgbColor,
+}
+
+const PRESETS: &[Preset] = &[
+    Preset {
+        name: "Static Red",
+        mode: EffectMode::Static,
+        color: RgbColor::new(255, 0, 0),
+    },
+    Preset {
+        name: "Rainbow",
+        mode: EffectMode::Rainbow,
+        color: RgbColor::BLACK,
+    },
+    Preset {
+        name: "Breathing Red",
+        mode: EffectMode::Breathing,
+        color: RgbColor::new(255, 0, 0),
+    },
+    Preset {
+        name: "Lights Off",
+        mode: EffectMode::Off,
+        color: RgbColor::BLACK,
+    },
+];
+
+/// Small version of the OpenCrate brand mark for the notification area.
+fn tray_icon_rgba() -> (Vec<u8>, u32, u32) {
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!(
+        "../../../assets/branding/opencrate-icon-48.png"
+    ))
+    .expect("embedded OpenCrate tray icon");
+    (icon.rgba, icon.width, icon.height)
+}
+
+struct StartupRestore {
+    settings: Settings,
+    retries_left: u8,
+    retry_at: Option<Instant>,
+}
+
+struct App {
+    ui: dashboard::State,
+    activity: dashboard::Activity,
+    fans: fans::State,
+    power: power::State,
+    mode: EffectMode,
+    color: RgbColor,
+    status: Message,
+    speed: f64,
+    brightness: u8,
+    lighting: Option<LightingController>,
+    requested: Option<Settings>,
+    revision: u64,
+    tray_events: mpsc::Receiver<MenuEvent>,
+    show_id: String,
+    preset_ids: Vec<String>,
+    quit_id: String,
+    tray_items: Vec<(MenuItem, &'static str)>,
+    quit_requested: bool,
+    store: preferences::Store,
+    autostart: bool,
+    startup_error: Option<String>,
+    startup_restore: Option<StartupRestore>,
+    instance: windows_startup::Instance,
+    window: window_activation::WindowActivation,
+    _tray: tray_icon::TrayIcon,
+}
+
+impl App {
+    fn change_language(&mut self, language: i18n::Language, ctx: &egui::Context) {
+        self.store.preferences.language = language;
+        i18n::set_language(language);
+        for (item, key) in &self.tray_items {
+            item.set_text(t(key));
+        }
+        let _ = self
+            ._tray
+            .set_tooltip(Some(t("OpenCrate — Hardware control")));
+        self.store.changed();
+        ctx.request_repaint();
+    }
+
+    fn lighting_status(&self) -> String {
+        if self.activity == dashboard::Activity::Applied {
+            if let Some(settings) = self.requested {
+                let mut parts = vec![t(settings.mode.display_name()).to_string()];
+                if settings.mode.takes_color() {
+                    parts.push(settings.color.to_string());
+                }
+                if settings.mode != EffectMode::Off {
+                    parts.push(format!("{}%", settings.brightness));
+                }
+                if is_animated(settings.mode) {
+                    parts.push(format!("{:.2}×", settings.speed));
+                }
+                parts.push(t("Synced").into());
+                return parts.join(" · ");
+            }
+        }
+        self.status.render()
+    }
+
+    fn new(
+        creation: &eframe::CreationContext<'_>,
+        store: preferences::Store,
+        mut instance: windows_startup::Instance,
+    ) -> std::io::Result<Self> {
+        let ctx = &creation.egui_ctx;
+        i18n::set_language(store.preferences.language);
+        let window = window_activation::WindowActivation::new(creation)?;
+        let activate = window.clone();
+        instance.listen(move || activate.show())?;
+        let saved = store.preferences.lighting().unwrap_or(Settings {
+            mode: EffectMode::Static,
+            color: RgbColor::new(255, 0, 0),
+            speed: 1.0,
+            brightness: 100,
+        });
+        let restore = store.preferences.restore_on_launch();
+        let (autostart, startup_error) = match windows_startup::autostart_enabled() {
+            Ok(enabled) => (enabled, None),
+            Err(error) => (
+                false,
+                Some(format!("Could not read Windows startup setting: {error}")),
+            ),
+        };
+        let wake = ctx.clone();
+        let lighting = LightingController::start(move || wake.request_repaint());
+        let status = match &lighting {
+            Ok(_) => Message::text("Choose an effect to get started."),
+            Err(error) => Message::with(
+                "Lighting control failed: {details}",
+                vec![("details", error.to_string())],
+            ),
+        };
+        let (tray_sender, tray_events) = mpsc::channel();
+        let menu = Menu::new();
+        let show = MenuItem::new(t("Show OpenCrate"), true, None);
+        let mut tray_items = vec![(show.clone(), "Show OpenCrate")];
+        let show_id = show.id().0.clone();
+        menu.append(&show).expect("tray menu");
+        menu.append(&tray_icon::menu::PredefinedMenuItem::separator())
+            .expect("tray menu");
+        let mut preset_ids = Vec::new();
+        for p in PRESETS {
+            let item = MenuItem::new(t(p.name), true, None);
+            tray_items.push((item.clone(), p.name));
+            preset_ids.push(item.id().0.clone());
+            menu.append(&item).expect("tray menu");
+        }
+        menu.append(&tray_icon::menu::PredefinedMenuItem::separator())
+            .expect("tray menu");
+        let quit = MenuItem::new(t("Quit"), true, None);
+        tray_items.push((quit.clone(), "Quit"));
+        let quit_id = quit.id().0.clone();
+        menu.append(&quit).expect("tray menu");
+
+        let wake = ctx.clone();
+        let activate = window.clone();
+        let show_event_id = show_id.clone();
+        MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+            let show = event.id().0 == show_event_id;
+            let _ = tray_sender.send(event);
+            // A hidden HWND may not repaint. Reveal it before asking egui to
+            // consume the menu event, rather than waiting inside App::update.
+            if show {
+                activate.show();
+            } else {
+                wake.request_repaint();
+            }
+        }));
+
+        let (rgba, w, h) = tray_icon_rgba();
+        let icon = Icon::from_rgba(rgba, w, h).expect("tray icon");
+        let tray = TrayIconBuilder::new()
+            .with_menu(Box::new(menu))
+            .with_tooltip(t("OpenCrate — Hardware control"))
+            .with_icon(icon)
+            .build()
+            .expect("tray icon build");
+
+        let mut app = Self {
+            ui: dashboard::State::new(ctx, saved.color),
+            fans: fans::State::new(ctx),
+            power: power::State::new(ctx),
+            activity: if lighting.is_ok() {
+                dashboard::Activity::Ready
+            } else {
+                dashboard::Activity::Error
+            },
+            mode: saved.mode,
+            color: saved.color,
+            status,
+            speed: saved.speed,
+            brightness: saved.brightness,
+            lighting: lighting.ok(),
+            requested: None,
+            revision: 0,
+            tray_events,
+            show_id,
+            preset_ids,
+            quit_id,
+            tray_items,
+            quit_requested: false,
+            store,
+            autostart,
+            startup_error,
+            startup_restore: None,
+            instance,
+            window,
+            _tray: tray,
+        };
+        if let Some(settings) = restore {
+            app.startup_restore = Some(StartupRestore {
+                settings,
+                retries_left: 5,
+                retry_at: None,
+            });
+            app.enqueue(settings);
+        }
+        Ok(app)
+    }
+
+    fn apply(&mut self, mode: EffectMode, color: RgbColor) {
+        self.submit(Settings {
+            mode,
+            color,
+            speed: self.speed,
+            brightness: self.brightness,
+        });
+    }
+
+    fn submit(&mut self, settings: Settings) {
+        // Any explicit lighting action takes precedence over a pending restore.
+        self.startup_restore = None;
+        self.enqueue(settings);
+    }
+
+    fn enqueue(&mut self, settings: Settings) {
+        let Some(lighting) = &mut self.lighting else {
+            return;
+        };
+        match lighting.apply(settings) {
+            Ok(revision) => {
+                self.revision = revision;
+                self.requested = Some(settings);
+                self.activity = dashboard::Activity::Applying;
+                self.status = Message::text("Applying your changes…");
+            }
+            Err(error) => {
+                self.requested = None;
+                self.activity = dashboard::Activity::Error;
+                self.status = Message::with(
+                    "Lighting control failed: {details}",
+                    vec![("details", error.to_string())],
+                );
+            }
+        }
+    }
+
+    fn poll_lighting(&mut self, ctx: &egui::Context) {
+        let Some(lighting) = &self.lighting else {
+            return;
+        };
+        while let Some(event) = lighting.try_event() {
+            if event.revision != self.revision {
+                continue;
+            }
+            self.status = match event.result {
+                Ok(settings) => {
+                    self.activity = dashboard::Activity::Applied;
+                    self.startup_restore = None;
+                    let saved = preferences::SavedLighting::from(settings);
+                    if self.store.preferences.last_lighting.as_ref() != Some(&saved) {
+                        self.store.preferences.last_lighting = Some(saved);
+                        self.store.changed();
+                    }
+                    Message::text("Your lighting is up to date")
+                }
+                Err(error) => {
+                    self.activity = dashboard::Activity::Error;
+                    self.requested = None;
+                    if let Some(restore) = &mut self.startup_restore {
+                        if restore.retries_left > 0 {
+                            restore.retries_left -= 1;
+                            restore.retry_at = Some(Instant::now() + Duration::from_secs(2));
+                        } else {
+                            self.startup_restore = None;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        }
+                    }
+                    Message::with(
+                        "Lighting control failed: {details}",
+                        vec![("details", error.to_string())],
+                    )
+                }
+            };
+        }
+    }
+
+    fn apply_preset(&mut self, idx: usize) {
+        if let Some(p) = PRESETS.get(idx) {
+            self.mode = p.mode;
+            self.color = p.color;
+            self.ui.hex = p.color.to_hex();
+            self.apply(p.mode, p.color);
+        }
+    }
+
+    fn poll_tray(&mut self, ctx: &egui::Context) {
+        while let Ok(ev) = self.tray_events.try_recv() {
+            let id = ev.id().0.clone();
+            if id == self.quit_id {
+                self.quit_requested = true;
+            } else if id == self.show_id {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            } else if let Some(idx) = self.preset_ids.iter().position(|p| p == &id) {
+                self.apply_preset(idx);
+            }
+        }
+        if self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+
+    fn poll_preferences(&mut self, ctx: &egui::Context) {
+        if self.instance.take_show_request() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
+        if let Some(restore) = &mut self.startup_restore {
+            if let Some(due) = restore.retry_at {
+                if Instant::now() >= due {
+                    restore.retry_at = None;
+                    let settings = restore.settings;
+                    self.enqueue(settings);
+                } else {
+                    ctx.request_repaint_after(due.saturating_duration_since(Instant::now()));
+                }
+            }
+        }
+        self.store.flush_if_due();
+        if let Some(delay) = self.store.pending_delay() {
+            ctx.request_repaint_after(delay);
+        }
+    }
+}
+
+impl Drop for App {
+    fn drop(&mut self) {
+        self.window.deactivate();
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Close button -> hide to tray instead of quitting.
+        if ctx.input(|i| i.viewport().close_requested()) && !self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        }
+        self.poll_tray(ctx);
+        self.poll_lighting(ctx);
+        self.poll_preferences(ctx);
+        self.fans.poll();
+        self.power.poll();
+
+        self.render_dashboard(ctx);
+    }
+}
+
+fn main() {
+    let from_startup = std::env::args_os().skip(1).any(|arg| arg == "--startup");
+    let instance = match windows_startup::Instance::claim(from_startup) {
+        Ok(Some(instance)) => instance,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("Could not initialize opencrate: {error}");
+            return;
+        }
+    };
+    let store = preferences::Store::load();
+    let start_hidden = from_startup && store.preferences.start_in_tray && store.error.is_none();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!(
+                    "../../../assets/branding/opencrate-icon-256.png"
+                ))
+                .expect("embedded OpenCrate window icon"),
+            )
+            .with_inner_size([1100.0, 800.0])
+            .with_min_inner_size([760.0, 620.0])
+            .with_visible(!start_hidden),
+        ..Default::default()
+    };
+    if let Err(e) = eframe::run_native(
+        "OpenCrate",
+        options,
+        Box::new(move |cc| Ok(Box::new(App::new(cc, store, instance)?) as Box<dyn eframe::App>)),
+    ) {
+        eprintln!("opencrate-ui failed: {e}");
+        std::process::exit(1);
+    }
+}

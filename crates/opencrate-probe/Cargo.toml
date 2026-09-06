@@ -1,0 +1,16 @@
+[package]
+name = "opencrate-probe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "opencrate-probe"
+path = "src/main.rs"
+
+[dependencies]
+opencrate-core = { path = "../opencrate-core" }
+opencrate-aura = { path = "../opencrate-aura" }
+clap = { version = "4", features = ["derive"] }
+hidapi = "2"

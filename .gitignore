@@ -1,0 +1,27 @@
+/target/
+/dist/
+# Upstream reference clones (OpenRGB etc.) — read-only RE material, not ours.
+rev/upstream/
+
+# Personal preferences, credentials, diagnostics and local tooling.
+.env
+.env.*
+!.env.example
+settings.json
+*.log
+*.dmp
+*.pcap
+*.pcapng
+*.idb
+*.i64
+*.til
+*.pdb
+*.pem
+*.key
+*.pfx
+*.p12
+.codex/
+.idea/
+.vscode/
+__pycache__/
+*.pyc

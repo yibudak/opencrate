@@ -1,0 +1,11 @@
+OpenCrate
+
+RGB aydınlatma, fan ve Windows güç kontrolleri tek uygulamada.
+
+Aydınlatma şu anda ASUS 0B05:19AF USB kontrolcüsünü destekler. Fan kontrolü için uyumlu AsusFanControlService hizmetinin kurulu ve çalışıyor olması gerekir. Armoury Crate uygulamasının kendisi gerekli değildir. Kullanılabilir güç ayarları Windows'a ve donanımına bağlıdır. Bu kurulum ASUS hizmeti veya sürücüsü yüklemez.
+
+Ayarlar > Uygulama dili bölümünden İngilizce, Basitleştirilmiş Çince veya Türkçe seçebilirsin. Mevcut tercihler güncelleme ve kaldırma sırasında korunur.
+
+Windows ile başlat seçeneği uygulamadan açılabilir. Zaten açıksa kurulum, başlangıç kaydını yeni kurulum konumuna günceller.
+
+OpenCrate bağımsız bir projedir; ASUS ile bağlantılı değildir ve ASUS tarafından desteklenmez veya onaylanmaz.

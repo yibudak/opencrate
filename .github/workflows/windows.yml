@@ -1,0 +1,135 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  windows:
+    name: Test and package Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check publishable source
+        run: python scripts/check-privacy.py
+
+      - name: Install MinGW-w64
+        id: msys2
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: Set up Rust and native tools
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          Join-Path $env:MSYS2_LOCATION 'mingw64/bin' | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed.' }
+
+      - name: Check tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $metadata = cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed.' }
+          $version = ($metadata.packages | Where-Object name -eq 'opencrate-ui').version
+          if ($env:RELEASE_TAG -cne "v$version" -or $version -notmatch '^\d+\.\d+\.\d+$') {
+            throw 'Release tag must be v<major>.<minor>.<patch> matching Cargo.toml.'
+          }
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run unit tests
+        run: cargo test --locked --workspace
+
+      - name: Check Clippy warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Build installer and check payload privacy
+        run: ./scripts/build-installer.ps1 -BootstrapInnoSetup
+
+      - name: Verify install, upgrade, languages and uninstall
+        run: |
+          $setups = @(Get-ChildItem dist/*-windows-x64-setup.exe)
+          if ($setups.Count -ne 1) { throw 'Expected exactly one setup executable.' }
+          ./scripts/test-installer.ps1 -InstallerPath $setups[0].FullName
+
+      - name: Upload tested installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-x64-setup
+          path: |
+            dist/*-windows-x64-setup.exe
+            dist/*-windows-x64-setup.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    needs: windows
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested installer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-x64-setup
+          path: dist
+
+      - name: Verify checksum and publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum --check ./*.sha256
+          cat > release-notes.md <<'NOTES'
+          Download **OpenCrate-<version>-windows-x64-setup.exe** below to install.
+          The source-code archives are for developers and do not contain the installer.
+
+          - Native x64 Windows 10 (1809+) and Windows 11; per-user installation.
+          - RGB effects, speed and brightness; ASUS service fan controls; Windows power policies.
+          - English, Simplified Chinese and Turkish; tray controls and optional Windows startup.
+          - Lighting targets compatible ASUS USB `0B05:19AF` firmware. Fan control requires an installed and running compatible `AsusFanControlService`, which is not bundled. Armoury Crate itself is not required.
+          - This release is unsigned; Windows may show an unknown-publisher or SmartScreen prompt. A SHA-256 checksum is included.
+
+          Quit OpenCrate from its tray menu before upgrading. Saved preferences are preserved.
+
+          OpenCrate is an independent project and is not affiliated with, supported or endorsed by ASUS.
+          NOTES
+          gh release create "$RELEASE_TAG" ./*-setup.exe ./*-setup.exe.sha256 \
+            --repo "$GH_REPO" --verify-tag --title "OpenCrate $RELEASE_TAG" \
+            --notes-file release-notes.md --latest

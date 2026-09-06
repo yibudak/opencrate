@@ -1,0 +1,18 @@
+[package]
+name = "opencrate-aura"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["hid"]
+hid = ["dep:hidapi"]
+
+[dependencies]
+opencrate-core = { path = "../opencrate-core" }
+hidapi = { version = "2", optional = true }
+
+[[example]]
+name = "direct_color"
+required-features = ["hid"]

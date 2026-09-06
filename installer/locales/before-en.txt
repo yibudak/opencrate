@@ -1,0 +1,11 @@
+OpenCrate
+
+RGB lighting, fan and Windows power controls in one app.
+
+Lighting currently targets the ASUS USB controller 0B05:19AF. Fan control requires a compatible AsusFanControlService installation to be running. Armoury Crate itself is not required. Available power settings depend on Windows and your hardware. This installer does not install ASUS services or drivers.
+
+Choose English, Simplified Chinese or Turkish inside Settings > Application language. Existing preferences are preserved during upgrades and uninstallation.
+
+Launch with Windows can be enabled in the app. If already enabled, Setup updates the startup entry to this installation.
+
+OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS.

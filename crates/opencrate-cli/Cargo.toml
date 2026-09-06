@@ -1,0 +1,16 @@
+[package]
+name = "opencrate-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "opencrate"
+path = "src/main.rs"
+
+[dependencies]
+opencrate-core = { path = "../opencrate-core" }
+opencrate-aura = { path = "../opencrate-aura" }
+opencrate-fan = { path = "../opencrate-fan" }
+clap = { version = "4", features = ["derive"] }
