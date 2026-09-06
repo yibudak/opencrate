@@ -1,4 +1,4 @@
-# OpenCrate <version>
+# OpenCrate release
 
 ## What's new
 
