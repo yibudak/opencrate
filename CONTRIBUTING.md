@@ -26,13 +26,16 @@ the project directory, install Rust components and build:
 
 ```powershell
 rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal --component rustfmt --component clippy
+rustup override set stable-x86_64-pc-windows-gnu
 cargo build --locked -p opencrate-ui
 cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-`rust-toolchain.toml` selects the GNU Windows toolchain. Use `gcc --version` and
+`rust-toolchain.toml` selects native stable Rust so Linux tooling and Dependabot
+can resolve dependencies. The directory override above selects GNU Rust for
+Windows development; it is stored locally by rustup. Use `gcc --version` and
 `windres --version` to check your native tools. A version-controlled `Cargo.lock`
 keeps application dependencies reproducible. The first build needs internet access.
 
@@ -91,6 +94,10 @@ To fix formatting, use `cargo fmt --all` and `python -m ruff format scripts`.
 
 Use clear, imperative commit subjects. A GitHub `noreply` email keeps your personal
 address out of commits; configure the address shown in your GitHub email settings.
+Check both author and committer identities. Local Git settings do not control
+GitHub web or API merge identities; configure email privacy in your GitHub account
+before using those merge methods. Maintainers can also merge tested commits locally
+while preserving their existing identities.
 Contributions are provided under the project's [MIT license](LICENSE). Preserve
 third-party copyright and license notices when adapting or updating dependencies.
 

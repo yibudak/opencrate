@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-${{ github.workflow }}-${{ github.ref }}
+  group: windows-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.sha || '' }}
   # Supersede old PR work, but let main and release checks finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 

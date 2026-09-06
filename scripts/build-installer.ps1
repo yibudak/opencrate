@@ -3,7 +3,7 @@
 .SYNOPSIS
 Build a self-contained x64 Windows installer and SHA-256 checksum.
 .DESCRIPTION
-Uses the repository's pinned GNU Rust toolchain and Inno Setup 6.7.3.
+Builds the Windows GNU target with stable Rust and Inno Setup 6.7.3.
 BootstrapInnoSetup downloads a checksum-pinned compiler into target only;
 portable mode does not register the compiler or modify PATH/file associations.
 #>

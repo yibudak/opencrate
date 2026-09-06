@@ -39,9 +39,11 @@ The setup executable and SHA-256 checksum are written to `dist`. See [installer 
 
 ## Build and run
 
-Use Windows with Rust and the MinGW-w64 GNU linker/resource compiler (`gcc` and `windres`) on PATH. `rust-toolchain.toml` selects the stable `x86_64-pc-windows-gnu` toolchain. GitHub Actions installs the required build tools automatically.
+Use Windows with Rust and the MinGW-w64 GNU linker/resource compiler (`gcc` and `windres`) on PATH. Select the GNU Windows toolchain for this directory with the commands below. `rust-toolchain.toml` uses native stable Rust for compatibility with Linux tooling and Dependabot. GitHub Actions installs and selects the Windows build tools automatically.
 
 ```powershell
+rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal --component rustfmt --component clippy
+rustup override set stable-x86_64-pc-windows-gnu
 cargo build --locked --release -p opencrate-ui
 .\target\release\opencrate-ui.exe
 ```
