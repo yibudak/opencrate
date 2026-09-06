@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="304" height="56" viewBox="0 0 304 56" role="img" aria-labelledby="title desc">
+  <title id="title">Download for Windows</title>
+  <desc id="desc">Open the latest OpenCrate release to download the Windows installer.</desc>
+  <rect width="304" height="56" rx="12" fill="#ffb324"/>
+  <g fill="none" stroke="#17191f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M28 17v17m-6-6 6 6 6-6M19 36v5h18v-5"/>
+    <path d="m279 23 5 5-5 5"/>
+  </g>
+  <text x="53" y="35" fill="#17191f" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Download for Windows</text>
+</svg>
