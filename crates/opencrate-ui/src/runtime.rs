@@ -40,6 +40,7 @@ pub fn icon_from_png(bytes: &[u8]) -> Result<egui::IconData, image::ImageError> 
 }
 
 enum Event {
+    Tray(tray_icon::menu::MenuEvent),
     Repaint { when: Instant, pass: u64 },
     AccessKit(egui_winit::accesskit_winit::Event),
 }
@@ -83,7 +84,9 @@ impl Running {
         use crate::{dashboard::Page, i18n::Language};
         match step {
             1 => self.info.events.push(egui::ViewportEvent::Close),
-            2 => self.app.window.show(),
+            2 => (self.app.diagnostic_tray_handler)(tray_icon::menu::MenuEvent {
+                id: self.app.show_id.clone().into(),
+            }),
             3 => self.app.change_language(Language::Turkish, &self.ctx),
             4 => self.app.change_language(Language::Chinese, &self.ctx),
             5 => self.app.ui.select_page(Page::Fans),
@@ -95,10 +98,24 @@ impl Running {
             }
             8 => self.info.events.push(egui::ViewportEvent::Close),
             9 => {
-                self.app.window.show();
+                (self.app.diagnostic_tray_handler)(tray_icon::menu::MenuEvent {
+                    id: self.app.show_id.clone().into(),
+                });
                 self.ctx.set_zoom_factor(1.5);
             }
-            10 => self.app.quit_requested = true,
+            10 => self.info.events.push(egui::ViewportEvent::Close),
+            11 => {
+                // Exercise the installed menu callback after an idle hidden
+                // phase, after the last diagnostic timer has been consumed.
+                // Do not add a repaint that could mask a missed wake.
+                let handler = self.app.diagnostic_tray_handler.clone();
+                let id = self.app.quit_id.clone().into();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(200));
+                    handler(tray_icon::menu::MenuEvent { id });
+                });
+                return;
+            }
             _ => {}
         }
         self.ctx.request_repaint();
@@ -232,7 +249,10 @@ impl ApplicationHandler<Event> for Host {
             input.init_accesskit(event_loop, &window, self.proxy.clone());
             let mut info = ViewportInfo::default();
             egui_winit::update_viewport_info(&mut info, &ctx, &window, true);
-            let app = App::new(&ctx, &window, store, instance)?;
+            let proxy = self.proxy.clone();
+            let app = App::new(&ctx, &window, store, instance, move |event| {
+                let _ = proxy.send_event(Event::Tray(event));
+            })?;
             window.set_visible(!hidden);
             Ok(Running {
                 app,
@@ -257,6 +277,14 @@ impl ApplicationHandler<Event> for Host {
 
     fn user_event(&mut self, _: &ActiveEventLoop, event: Event) {
         match event {
+            Event::Tray(event) => {
+                if let Some(running) = &mut self.running {
+                    running.app.handle_tray_event(event);
+                    // Tray actions must run even while hidden or minimized,
+                    // independently of egui's coalesced repaint callbacks.
+                    self.schedule.request(Instant::now());
+                }
+            }
             Event::Repaint { when, pass } => {
                 let current = self
                     .running

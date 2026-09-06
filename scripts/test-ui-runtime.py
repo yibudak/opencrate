@@ -141,7 +141,8 @@ def main():
     (output / "samples.json").write_text(json.dumps(samples, indent=2), encoding="utf-8")
     assert lifecycle["ok"], lifecycle
     phases = lifecycle["phases"]
-    assert len(phases) == 10, phases
+    assert len(phases) == 11, phases
+    assert phases[-1]["phase"] == "tray-quit", phases[-1]
     measurements = []
     previous_end = 0.0
     for phase in phases:

@@ -27,7 +27,7 @@ static CAUSES: Mutex<BTreeMap<String, usize>> = Mutex::new(BTreeMap::new());
 static EVENTS: Mutex<BTreeMap<&'static str, usize>> = Mutex::new(BTreeMap::new());
 const INTERVAL: Duration = Duration::from_secs(5);
 const SETTLE: Duration = Duration::from_millis(1500);
-const PHASES: [&str; 10] = [
+const PHASES: [&str; 11] = [
     "visible-idle",
     "tray-idle",
     "reopened",
@@ -38,6 +38,7 @@ const PHASES: [&str; 10] = [
     "animation",
     "tray-animation",
     "scaled-reopen",
+    "tray-quit",
 ];
 
 pub fn enabled() -> bool {
