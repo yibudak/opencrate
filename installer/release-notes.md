@@ -1,4 +1,13 @@
-# OpenCrate release
+# OpenCrate <version>
+
+## What's new
+
+- Reduced idle memory and CPU use with cached software rendering. Closing the window to the tray releases rendering buffers while hardware controls remain active.
+- Added System, Light and Dark appearance settings, with saved preferences and labels in English, Simplified Chinese and Turkish.
+- Simplified the download and installation guide, with an application screenshot and a separate technical reference.
+- Fixed Windows power API error handling and expanded automated quality, security and installer checks.
+
+## Installation
 
 Download `OpenCrate-<version>-windows-x64-setup.exe` to install.
 The source-code archives are for developers and do not contain the installer.
