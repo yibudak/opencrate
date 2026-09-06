@@ -1,6 +1,6 @@
 //! Native PowrProf API. GUID identity is independent of localized plan names.
 use crate::*;
-use std::ptr::{null, null_mut};
+use std::ptr::{null, null_mut, NonNull};
 use windows_sys::{
     core::GUID,
     Win32::{
@@ -28,6 +28,21 @@ fn id(guid: GUID) -> PlanId {
         | ((guid.data3 as u128) << 64)
         | u64::from_be_bytes(guid.data4) as u128
 }
+
+/// Copy and release a successful PowerGetActiveScheme response.
+///
+/// # Safety
+/// On success, a non-null pointer must own an initialized GUID allocated by
+/// LocalAlloc. On failure, the output is unspecified and must not be accessed.
+unsafe fn consume_active_scheme(code: u32, pointer: *mut GUID) -> Result<PlanId, String> {
+    check(code, "Read active Windows plan")?;
+    let pointer = NonNull::new(pointer).ok_or("Windows did not return an active power plan.")?;
+    // The successful API response owns this allocation until LocalFree below.
+    let value = unsafe { id(pointer.read()) };
+    unsafe { LocalFree(pointer.as_ptr().cast()) };
+    Ok(value)
+}
+
 fn setting_guid(key: Setting) -> GUID {
     match key {
         Setting::Minimum => GUID_PROCESSOR_THROTTLE_MINIMUM,
@@ -250,18 +265,8 @@ impl Backend for Windows {
     fn active(&mut self) -> Result<PlanId, String> {
         let mut pointer = null_mut();
         let code = unsafe { PowerGetActiveScheme(null_mut(), &mut pointer) };
-        // The returned GUID belongs to LocalAlloc, never to Rust's allocator.
-        let value = if pointer.is_null() {
-            None
-        } else {
-            let value = unsafe { id(*pointer) };
-            unsafe {
-                LocalFree(pointer.cast());
-            }
-            Some(value)
-        };
-        check(code, "Read active Windows plan")?;
-        value.ok_or("Windows did not return an active power plan.".into())
+        // PowerGetActiveScheme supplies a LocalAlloc GUID only on success.
+        unsafe { consume_active_scheme(code, pointer) }
     }
     fn activate(&mut self, plan: PlanId) -> Result<(), String> {
         check(
@@ -314,5 +319,44 @@ impl Backend for Windows {
             },
             key.label(),
         )
+    }
+}
+
+#[cfg(test)]
+mod pointer_tests {
+    use super::*;
+    use windows_sys::Win32::{
+        Foundation::ERROR_ACCESS_DENIED,
+        System::Memory::{LocalAlloc, LMEM_FIXED},
+    };
+
+    #[test]
+    fn failed_response_never_reads_or_frees_unspecified_output() {
+        // This address cannot be read or freed. A failed API call does not own it.
+        let unspecified = NonNull::<GUID>::dangling().as_ptr();
+        let result = unsafe { consume_active_scheme(ERROR_ACCESS_DENIED, unspecified) };
+        assert!(result.unwrap_err().starts_with("Read active Windows plan:"));
+    }
+
+    #[test]
+    fn successful_response_still_requires_a_non_null_guid() {
+        let result = unsafe { consume_active_scheme(0, null_mut()) };
+        assert_eq!(
+            result.unwrap_err(),
+            "Windows did not return an active power plan."
+        );
+    }
+
+    #[test]
+    fn successful_response_copies_a_local_allocation() {
+        let expected = 0x11223344_5566_7788_99aa_bbccddeeff00;
+        let pointer = unsafe { LocalAlloc(LMEM_FIXED, std::mem::size_of::<GUID>()).cast::<GUID>() };
+        assert!(!pointer.is_null());
+        unsafe { pointer.write(GUID::from_u128(expected)) };
+        // Ownership is transferred to the consumer; this test never reads it again.
+        assert_eq!(
+            unsafe { consume_active_scheme(0, pointer) }.unwrap(),
+            expected
+        );
     }
 }
