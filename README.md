@@ -1,5 +1,11 @@
 # OpenCrate
 
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="assets/branding/opencrate-logo.png" alt="OpenCrate logo" width="420">
+</p>
+<!-- markdownlint-enable MD033 -->
+
 **Make your PC feel like yours.**
 
 Control your PC's lights, fans and power settings in one free app.
@@ -9,7 +15,26 @@ An alternative to Armoury Crate for supported ASUS hardware.
 
 Windows 10 / 11 · x64 · Free & open source
 
-![Set the mood with 17 lighting effects. Find your balance by adjusting fan speed. Pick your power by switching Windows power plans.](assets/readme/overview.svg)
+![OpenCrate's Lighting page with a live effect preview, color picker, brightness and animation speed controls.](assets/readme/lighting.jpg)
+
+**Your lights, your way.** Choose from 17 effects, pick a color and set the mood.
+
+<!-- markdownlint-disable MD033 -->
+<details>
+<summary><strong>See the fan and power controls</strong></summary>
+
+**Find your balance.** Adjust fan speed and cooling profiles on supported hardware.
+
+![OpenCrate's Fans page showing cooling profiles and fan controls.](assets/readme/fans.jpg)
+
+**Pick your power.** Switch Windows power plans and adjust performance settings.
+
+![OpenCrate's Power page showing Windows power plans and processor settings.](assets/readme/power.jpg)
+
+</details>
+<!-- markdownlint-enable MD033 -->
+
+Screenshots from OpenCrate 0.1.0. Available controls depend on your PC.
 
 ## Get started in 3 steps
 
