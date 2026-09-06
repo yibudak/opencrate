@@ -38,9 +38,7 @@ BINARY_ASSETS = {
     "assets/branding/opencrate-icon-48.png",
     "assets/branding/opencrate-icon.ico",
     "assets/fonts/NotoSansSC-Regular.ttf",
-    "assets/readme/lighting.jpg",
-    "assets/readme/fans.jpg",
-    "assets/readme/power.jpg",
+    "assets/readme/opencrate-lighting.png",
 }
 PRIVATE_SUFFIXES = {
     ".log",

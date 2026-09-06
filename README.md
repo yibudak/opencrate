@@ -15,26 +15,11 @@ An alternative to Armoury Crate for supported ASUS hardware.
 
 Windows 10 / 11 · x64 · Free & open source
 
-![OpenCrate's Lighting page with a live effect preview, color picker, brightness and animation speed controls.](assets/readme/lighting.jpg)
+![OpenCrate's Lighting page showing a static red effect, color picker and brightness controls.](assets/readme/opencrate-lighting.png)
 
 **Your lights, your way.** Choose from 17 effects, pick a color and set the mood.
 
-<!-- markdownlint-disable MD033 -->
-<details>
-<summary><strong>See the fan and power controls</strong></summary>
-
-**Find your balance.** Adjust fan speed and cooling profiles on supported hardware.
-
-![OpenCrate's Fans page showing cooling profiles and fan controls.](assets/readme/fans.jpg)
-
-**Pick your power.** Switch Windows power plans and adjust performance settings.
-
-![OpenCrate's Power page showing Windows power plans and processor settings.](assets/readme/power.jpg)
-
-</details>
-<!-- markdownlint-enable MD033 -->
-
-Screenshots from OpenCrate 0.1.0. Available controls depend on your PC.
+Available controls depend on your PC.
 
 ## Get started in 3 steps
 
