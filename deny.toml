@@ -18,7 +18,7 @@ allow = [
     "OFL-1.1", "Unicode-3.0", "Zlib",
 ]
 exceptions = [
-    { crate = "epaint_default_fonts@0.32.3", allow = ["Ubuntu-font-1.0"] },
+    { crate = "epaint_default_fonts@0.33.3", allow = ["Ubuntu-font-1.0"] },
 ]
 
 [bans]

@@ -119,7 +119,7 @@ impl Store {
         Self::load_path(PathBuf::from(base).join("opencrate").join("settings.json"))
     }
 
-    fn load_path(path: PathBuf) -> Self {
+    pub(crate) fn load_path(path: PathBuf) -> Self {
         let result = match fs::read_to_string(&path) {
             Ok(json) => Preferences::parse(&json),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Preferences::default()),

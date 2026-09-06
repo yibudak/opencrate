@@ -5,7 +5,7 @@ use crate::{
     theme::{self, *},
     windows_startup, App,
 };
-use eframe::egui::{self, pos2, vec2, Align, Color32, FontId, Layout, Rect, RichText, Stroke, Ui};
+use egui::{pos2, vec2, Align, Color32, FontId, Layout, Rect, RichText, Stroke, Ui};
 use opencrate_aura::{
     animation::{self, is_animated, Timeline, MAX_SPEED, MIN_SPEED},
     playback::Settings,
@@ -50,9 +50,14 @@ pub struct State {
 }
 
 impl State {
+    #[cfg(feature = "diagnostics")]
+    pub fn select_page(&mut self, page: Page) {
+        self.page = page;
+    }
+
     pub fn new(ctx: &egui::Context, color: RgbColor) -> Self {
         theme::install(ctx);
-        let icon = eframe::icon_data::from_png_bytes(include_bytes!(
+        let icon = crate::runtime::icon_from_png(include_bytes!(
             "../../../assets/branding/opencrate-icon-256.png"
         ))
         .expect("embedded OpenCrate brand mark");
@@ -676,6 +681,15 @@ impl App {
                     Stroke::new(1.0_f32, BORDER.gamma_multiply(0.6)),
                 );
             }
+            // Keep changing LEDs in their own mesh so the software renderer can
+            // reuse the rest of the dashboard instead of rasterizing it again.
+            let led_painter = p
+                .clone()
+                .with_layer_id(egui::LayerId::new(
+                    egui::Order::Middle,
+                    egui::Id::new("lighting-preview-leds"),
+                ))
+                .with_clip_rect(right.intersect(ui.clip_rect()));
             for (index, led) in leds.into_iter().enumerate() {
                 let angle =
                     index as f32 / 48.0 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
@@ -686,9 +700,9 @@ impl App {
                     led.g as f32 / 255.0,
                     led.b as f32 / 255.0,
                 ));
-                p.circle_filled(position, 11.0, color.gamma_multiply(0.07));
-                p.circle_filled(position, 6.5, color.gamma_multiply(0.15));
-                p.circle(position, 3.2, color, Stroke::new(0.5_f32, BORDER));
+                led_painter.circle_filled(position, 11.0, color.gamma_multiply(0.07));
+                led_painter.circle_filled(position, 6.5, color.gamma_multiply(0.15));
+                led_painter.circle(position, 3.2, color, Stroke::new(0.5_f32, BORDER));
             }
             p.text(
                 center - vec2(0.0, 8.0),
@@ -705,13 +719,14 @@ impl App {
                 MUTED,
             );
         });
-        // Background hardware playback is independent of this visual preview.
+        // Keep this decorative preview at 20 Hz. Hardware playback has its own
+        // cadence and continues independently when this page is not being drawn.
         if is_animated(self.mode)
             && ui
                 .ctx()
                 .input(|i| i.focused && i.viewport().minimized != Some(true))
         {
-            ui.ctx().request_repaint_after(Duration::from_millis(33));
+            ui.ctx().request_repaint_after(Duration::from_millis(50));
         }
     }
 }

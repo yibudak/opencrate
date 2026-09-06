@@ -12,15 +12,12 @@ mod platform {
         },
         thread,
     };
-    use windows_sys::{
-        core::w,
-        Win32::{
-            Foundation::{
-                CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, ERROR_FILE_NOT_FOUND,
-                ERROR_SUCCESS, HANDLE, WAIT_OBJECT_0,
-            },
-            System::{Registry::*, Threading::*},
+    use windows_sys::Win32::{
+        Foundation::{
+            CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, ERROR_FILE_NOT_FOUND, ERROR_SUCCESS,
+            HANDLE, WAIT_OBJECT_0,
         },
+        System::{Registry::*, Threading::*},
     };
 
     const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -205,13 +202,34 @@ mod platform {
         /// Returns None after notifying an existing instance. Startup invocations
         /// stay quiet; manual invocations reveal the already running window.
         pub fn claim(from_startup: bool) -> io::Result<Option<Self>> {
-            let mutex = unsafe { CreateMutexW(ptr::null(), 0, w!("Local\\opencrate.ui.v1")) };
+            Self::claim_named(
+                from_startup,
+                "Local\\opencrate.ui.v1",
+                "Local\\opencrate.show.v1",
+            )
+        }
+
+        #[cfg(feature = "diagnostics")]
+        pub fn diagnostic() -> io::Result<Self> {
+            let prefix = format!("Local\\opencrate.diagnostic.{}", std::process::id());
+            Self::claim_named(false, &format!("{prefix}.mutex"), &format!("{prefix}.show"))?
+                .ok_or_else(|| io::Error::other("Diagnostic instance already exists"))
+        }
+
+        fn claim_named(
+            from_startup: bool,
+            mutex_name: &str,
+            event_name: &str,
+        ) -> io::Result<Option<Self>> {
+            let mutex_name = wide(mutex_name);
+            let event_name = wide(event_name);
+            let mutex = unsafe { CreateMutexW(ptr::null(), 0, mutex_name.as_ptr()) };
             if mutex.is_null() {
                 return Err(io::Error::last_os_error());
             }
             let existing = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
             let mutex = Handle(mutex);
-            let event = unsafe { CreateEventW(ptr::null(), 0, 0, w!("Local\\opencrate.show.v1")) };
+            let event = unsafe { CreateEventW(ptr::null(), 0, 0, event_name.as_ptr()) };
             if event.is_null() {
                 return Err(io::Error::last_os_error());
             }
@@ -317,6 +335,10 @@ mod platform {
     impl Instance {
         pub fn claim(_: bool) -> io::Result<Option<Self>> {
             Ok(Some(Self))
+        }
+        #[cfg(feature = "diagnostics")]
+        pub fn diagnostic() -> io::Result<Self> {
+            Ok(Self)
         }
         pub fn listen(&mut self, _: impl Fn() + Send + 'static) -> io::Result<()> {
             Ok(())

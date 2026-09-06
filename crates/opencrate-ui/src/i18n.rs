@@ -184,11 +184,10 @@ mod tests {
 
     #[test]
     fn dynamic_labels_have_translations_and_fonts_cover_every_catalog() {
-        use eframe::egui;
         let ctx = egui::Context::default();
         crate::theme::install(&ctx);
         let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            ctx.fonts(|fonts| {
+            ctx.fonts_mut(|fonts| {
                 for language in Language::ALL {
                     let labels = &catalog()[language as usize];
                     for effect in opencrate_core::EffectMode::all() {

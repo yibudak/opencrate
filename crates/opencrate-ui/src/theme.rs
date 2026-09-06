@@ -1,7 +1,7 @@
 //! Shared visual language for the hardware control pages.
 
 use crate::i18n::t;
-use eframe::egui::{self, pos2, vec2, Color32, FontId, Rect, RichText, Stroke, Ui};
+use egui::{pos2, vec2, Color32, FontId, Rect, RichText, Stroke, Ui};
 
 pub const BACKGROUND: Color32 = Color32::from_rgb(17, 19, 23);
 pub const SIDEBAR: Color32 = Color32::from_rgb(21, 23, 27);

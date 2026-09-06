@@ -64,11 +64,15 @@ Preferences are stored in `%APPDATA%\opencrate\settings.json`. They include `lan
 
 Closing the window keeps OpenCrate running in the tray. Choose **Show OpenCrate** to reopen it or **Quit** to exit.
 
+The interface uses a cached CPU renderer, so opening it does not load an OpenGL or Vulkan driver. Closing or minimizing the window releases its drawing buffers and stops visual animation. Tray actions, lighting playback, settings saves and hardware workers continue independently. The lighting preview runs at approximately 20 frames per second while focused; this does not change the hardware playback rate.
+
 - Lighting animations continue in the tray. On Quit, lighting falls back to a built-in controller effect; dimmed multicolor animations remain as a static color.
 - Fan changes are temporary. Normal Quit restores the original curves that OpenCrate still owns. Fan settings are not reapplied at startup.
 - Applied power settings persist in Windows after Quit and restart. Undo history lasts only for the current session.
 
 **Launch with Windows** registers the current executable under the current user's Windows Run key. If you move the executable, disable and re-enable this option from the new location.
+
+For reproducible, hardware-free memory and CPU measurements, run `python scripts/test-ui-runtime.py` on Windows. Add `--start-hidden` to test launching directly into the tray. These checks build an opt-in diagnostic executable, use isolated preferences and instance names, and save measurements and rendered screenshots under `target`. Normal installer builds omit diagnostic support. See [performance notes](rev/performance.md) for the measurement method and limits.
 
 ## Project layout
 
