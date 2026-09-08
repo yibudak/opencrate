@@ -138,7 +138,7 @@ impl App {
                         ui.set_width(ui.available_width());
                         match self.ui.page {
                             Page::Lighting => self.lighting_page(ui),
-                            Page::Fans => self.fans.show(ui),
+                            Page::Fans => self.fans.show(ui, &mut self.store),
                             Page::Power => self.power.show(ui),
                             Page::Settings => self.settings_page(ui),
                         }

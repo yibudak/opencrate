@@ -10,8 +10,8 @@ fn main() -> Result<(), String> {
     let fans = session.snapshot()?;
     for fan in &fans {
         println!(
-            "{} [{}]: raw duty {}, minimum {}, curve {:?}",
-            fan.name, fan.id, fan.duty, fan.minimum, fan.curve
+            "{} [{}]: raw duty {}, minimum {}, RPM {:?}, curve {:?}",
+            fan.name, fan.id, fan.duty, fan.minimum, fan.rpm, fan.curve
         );
     }
     if std::env::args().any(|s| s == "--test-full") {

@@ -40,6 +40,7 @@ BINARY_ASSETS = {
     "assets/fonts/NotoSansSC-Regular.ttf",
     "assets/screenshots/settings-light.png",
     "assets/screenshots/settings-dark.png",
+    "assets/screenshots/fans-dark.png",
     "assets/readme/opencrate-lighting.png",
 }
 PRIVATE_SUFFIXES = {

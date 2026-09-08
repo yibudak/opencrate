@@ -55,6 +55,12 @@ impl SavedLighting {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FanGroup {
+    pub name: String,
+    pub members: Vec<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
     version: u32,
@@ -64,6 +70,7 @@ pub struct Preferences {
     pub start_in_tray: bool,
     pub check_updates: bool,
     pub last_lighting: Option<SavedLighting>,
+    pub fan_groups: Vec<FanGroup>,
 }
 
 impl Default for Preferences {
@@ -76,6 +83,7 @@ impl Default for Preferences {
             start_in_tray: true,
             check_updates: true,
             last_lighting: None,
+            fan_groups: Vec::new(),
         }
     }
 }
@@ -205,6 +213,19 @@ mod tests {
     use super::*;
     use crate::theme::ThemePreference;
     use opencrate_core::{EffectMode, RgbColor};
+
+    #[test]
+    fn saved_fan_groups_roundtrip_without_saving_or_reapplying_cooling_modes() {
+        let mut preferences = Preferences::parse(r#"{"version":1}"#).unwrap();
+        assert!(preferences.fan_groups.is_empty());
+        preferences.fan_groups.push(FanGroup {
+            name: "Case fans".into(),
+            members: vec![2, 3],
+        });
+        let json = serde_json::to_string(&preferences).unwrap();
+        assert_eq!(Preferences::parse(&json).unwrap(), preferences);
+        assert!(preferences.restore_on_launch().is_none());
+    }
 
     #[test]
     fn update_checks_default_on_and_opt_out_survives_roundtrip() {
