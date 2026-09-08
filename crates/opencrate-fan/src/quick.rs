@@ -1,6 +1,6 @@
 //! All-fan actions, preflight validation, and rollback of partial applies.
 
-use crate::service::{manual_curve, Fan, Point};
+use crate::service::{manual_curve, validate_custom, Fan, Point};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuickMode {
@@ -21,6 +21,13 @@ impl QuickMode {
 }
 
 #[derive(Clone, Debug)]
+pub enum Setting {
+    Preset(QuickMode),
+    Manual(u8),
+    Curve(Vec<Point>),
+}
+
+#[derive(Clone, Debug)]
 pub struct Change {
     pub id: u32,
     pub name: String,
@@ -32,21 +39,51 @@ pub fn plan(fans: &[Fan], mode: QuickMode) -> Result<Vec<Change>, String> {
     if fans.is_empty() {
         return Err("No fans are available.".into());
     }
+    plan_group(
+        fans,
+        &fans.iter().map(|f| f.id).collect::<Vec<_>>(),
+        &Setting::Preset(mode),
+    )
+}
+
+/// Resolve every member and validate every target before making any writes.
+/// Preset indices are local to a fan, so always resolve presets by name.
+pub fn plan_group(fans: &[Fan], ids: &[u32], setting: &Setting) -> Result<Vec<Change>, String> {
+    if ids.is_empty() {
+        return Err("Select at least one fan for this group.".into());
+    }
+    let mut seen = std::collections::HashSet::new();
     let mut changes = Vec::new();
-    for fan in fans {
+    for id in ids {
+        if !seen.insert(*id) {
+            return Err("A fan can only appear once in a group.".into());
+        }
+        let fan = fans
+            .iter()
+            .find(|f| f.id == *id)
+            .ok_or_else(|| format!("Fan {id} is unavailable. No fans were changed."))?;
         if !fan.writable {
             return Err(format!(
                 "{} does not support this action. No fans were changed.",
                 fan.name
             ));
         }
-        if mode == QuickMode::FullBlast && fan.curve.iter().all(|p| p.duty == 255) {
+        if matches!(setting, Setting::Preset(QuickMode::FullBlast))
+            && fan.curve.iter().all(|p| p.duty == 255)
+        {
             continue;
         }
-        let after = if mode == QuickMode::FullBlast {
-            manual_curve(fan, 100)?
-        } else {
-            fan.profiles
+        let after = match setting {
+            Setting::Manual(duty) => manual_curve(fan, *duty)
+                .map_err(|e| format!("{}: {e} No fans were changed.", fan.name))?,
+            Setting::Curve(points) => {
+                validate_custom(points, fan)
+                    .map_err(|e| format!("{}: {e} No fans were changed.", fan.name))?;
+                points.clone()
+            }
+            Setting::Preset(QuickMode::FullBlast) => manual_curve(fan, 100)?,
+            Setting::Preset(mode) => fan
+                .profiles
                 .iter()
                 .find(|p| p.name == mode.label())
                 .ok_or_else(|| {
@@ -57,7 +94,7 @@ pub fn plan(fans: &[Fan], mode: QuickMode) -> Result<Vec<Change>, String> {
                     )
                 })?
                 .curve
-                .clone()
+                .clone(),
         };
         if fan.curve != after {
             changes.push(Change {
@@ -136,6 +173,7 @@ mod tests {
                     id,
                     name: format!("Fan {id}"),
                     duty: 51,
+                    rpm: Some(700),
                     minimum: 102,
                     writable: true,
                     can_restore: false,
@@ -158,6 +196,49 @@ mod tests {
             assert!(change.after.iter().all(|p| p.duty == 255));
             assert_eq!(change.before[0].duty, 51);
         }
+    }
+
+    #[test]
+    fn groups_write_only_selected_fans_once_and_repeating_is_a_no_op() {
+        let mut fans = fans();
+        let setting = Setting::Preset(QuickMode::FullBlast);
+        let changes = plan_group(&fans, &[3, 1], &setting).unwrap();
+        let untouched = fans[1].curve.clone();
+        let mut writes = Vec::new();
+        execute(&changes, |id, curve| {
+            writes.push(id);
+            fans.iter_mut().find(|f| f.id == id).unwrap().curve = curve.to_vec();
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(writes, [3, 1]);
+        assert_eq!(fans[1].curve, untouched);
+        assert!(plan_group(&fans, &[1, 3], &setting).unwrap().is_empty());
+        assert!(can_undo(&changes, &fans));
+    }
+
+    #[test]
+    fn group_preflight_checks_members_limits_and_each_controllers_point_count() {
+        let mut fans = fans();
+        let setting = Setting::Manual(40);
+        assert!(plan_group(&fans, &[], &setting).is_err());
+        assert!(plan_group(&fans, &[1, 1], &setting).is_err());
+        assert!(plan_group(&fans, &[1, 9], &setting).is_err());
+        fans[1].minimum = 153;
+        assert!(plan_group(&fans, &[1, 2], &setting).is_err());
+        assert_eq!(plan_group(&fans, &[1, 3], &setting).unwrap().len(), 2);
+        let curve = manual_curve(&fans[0], 60).unwrap();
+        fans[1].curve.push(Point {
+            temperature: 85,
+            duty: 255,
+        });
+        assert!(plan_group(&fans, &[1, 2], &Setting::Curve(curve.clone())).is_err());
+        assert_eq!(
+            plan_group(&fans, &[1, 3], &Setting::Curve(curve))
+                .unwrap()
+                .len(),
+            2
+        );
     }
     #[test]
     fn preflight_rejects_unsupported_fans_and_missing_profiles() {

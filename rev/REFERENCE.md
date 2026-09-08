@@ -7,7 +7,7 @@ For packaging, see the [installer guide](../installer/README.md).
 ## Features
 
 - **Lighting:** synchronized RGB control, 17 effects, a color picker, brightness adjustment and animation speed from 0.25× to 4×.
-- **Cooling:** available ASUS cooling profiles, manual fan speed, custom temperature curves, Full Blast and other actions for all fans, with restoration and undo controls.
+- **Cooling:** ASUS profiles, manual speed, draggable temperature curves, live RPM/duty readings, saved fan groups and one-time bulk actions, with restoration and undo controls.
 - **Power:** installed Windows power plans, separate plugged-in and battery processor settings, boost mode, energy preference and undo for the last change.
 - **Desktop integration:** notification-area controls, optional launch at Windows sign-in, optional tray startup and restoration of the last applied lighting settings.
 - **Appearance:** matching light and dark themes with amber accents. Follow Windows app mode automatically (default), or choose **System**, **Light** or **Dark** in **Settings → Appearance**. Changes apply immediately.
@@ -17,7 +17,7 @@ For packaging, see the [installer guide](../installer/README.md).
 
 Lighting currently targets the ASUS USB controller `0B05:19AF` and its supported four-channel firmware layout. Matching the vendor name alone does not establish compatibility; other controllers and firmware layouts are not supported by this backend. This is an evolving alternative with a smaller hardware and feature set than Armoury Crate.
 
-Armoury Crate itself is not required. Lighting uses the controller's HID interface, and all lights are synchronized. **Fan control requires a compatible `AsusFanControlService` installation to be running.** OpenCrate does not install this service; uninstalling ASUS software may remove it. Without it, fan controls are unavailable, while supported RGB and Windows power controls remain independent. Unsupported fans remain read-only. Fan output is shown as duty percentage, with no live RPM reading. Custom curves preserve the controller's minimum duty and critical-temperature requirements.
+Armoury Crate itself is not required. Lighting uses the controller's HID interface, and all lights are synchronized. **Fan control requires a compatible `AsusFanControlService` installation to be running.** OpenCrate does not install this service; uninstalling ASUS software may remove it. Without it, fan controls are unavailable, while supported RGB and Windows power controls remain independent. Unsupported fans remain read-only. Fan output is shown as duty percentage alongside measured RPM from the optional ASUS hardware-monitor provider. An unavailable RPM sensor is distinct from a stopped fan. Custom curves respect the lowest nonzero duty supported by valid controller curves and the critical-temperature requirement. See [fan service notes](FAN_SERVICE_NOTES.md) for group behavior and compatibility details.
 
 Power control uses Windows power-policy APIs. Available settings depend on Windows, hardware and permissions. Processor percentages are performance policies, not CPU watt limits; the app does not expose voltage, PPT/TDC/EDC or BIOS tuning.
 
