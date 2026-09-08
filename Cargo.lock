@@ -2627,6 +2627,7 @@ dependencies = [
 name = "opencrate-power"
 version = "0.1.2"
 dependencies = [
+ "windows",
  "windows-sys 0.61.2",
 ]
 

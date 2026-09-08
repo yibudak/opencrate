@@ -121,11 +121,14 @@ impl Message {
 /// Windows returns localized plan names. Standard GUIDs have our own UI names;
 /// custom names are user data and must not be translated or used as identifiers.
 pub fn plan_name(plan: &opencrate_power::Plan) -> &str {
-    use opencrate_power::{BALANCED, HIGH_PERFORMANCE, POWER_SAVER};
+    use opencrate_power::{
+        BALANCED, HIGH_PERFORMANCE, OPENCRATE_ULTIMATE, POWER_SAVER, ULTIMATE_PERFORMANCE,
+    };
     match plan.id {
         BALANCED => t("Balanced"),
         HIGH_PERFORMANCE => t("High performance"),
         POWER_SAVER => t("Power saver"),
+        ULTIMATE_PERFORMANCE | OPENCRATE_ULTIMATE => t("Ultimate performance"),
         _ => &plan.name,
     }
 }

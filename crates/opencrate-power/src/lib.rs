@@ -2,6 +2,7 @@
 //! Changes persist in Windows; opening or closing a session never writes settings.
 
 pub mod service;
+pub mod telemetry;
 #[cfg(windows)]
 pub mod windows;
 
@@ -9,6 +10,9 @@ pub type PlanId = u128;
 pub const BALANCED: PlanId = 0x381b4222_f694_41f0_9685_ff5bb260df2e;
 pub const POWER_SAVER: PlanId = 0xa1841308_3541_4fab_bc81_f71556f20b4a;
 pub const HIGH_PERFORMANCE: PlanId = 0x8c5e7fda_e8bf_4a96_9a85_a6e23a8c635c;
+pub const ULTIMATE_PERFORMANCE: PlanId = 0xe9a42b02_d5df_448d_aa00_03f14749eb61;
+// Stable destination so repeated installs never create another copy.
+pub const OPENCRATE_ULTIMATE: PlanId = 0x6616b5a1_4096_4eaa_a203_e764057b3143;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -99,6 +103,8 @@ pub struct Snapshot {
     pub cpu: [CpuSettings; 2],
     pub source: Option<Source>,
     pub battery_percent: Option<u8>,
+    pub has_battery: bool,
+    pub ultimate_plan: Option<PlanId>,
     pub can_undo: bool,
 }
 impl Snapshot {
@@ -111,6 +117,9 @@ impl Snapshot {
 }
 
 pub trait Backend {
+    fn install_ultimate(&mut self) -> Result<PlanId, String> {
+        Err("Ultimate Performance is unavailable on this system.".into())
+    }
     fn snapshot(&mut self) -> Result<Snapshot, String>;
     fn active(&mut self) -> Result<PlanId, String>;
     fn activate(&mut self, plan: PlanId) -> Result<(), String>;
@@ -135,6 +144,60 @@ pub struct Edit {
 
 pub fn values(controls: &[Control]) -> Vec<(Setting, u32)> {
     controls.iter().map(|c| (c.key, c.value)).collect()
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CpuPreset {
+    Quiet,
+    Everyday,
+    Performance,
+}
+impl CpuPreset {
+    pub const ALL: [Self; 3] = [Self::Quiet, Self::Everyday, Self::Performance];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Quiet => "Quiet",
+            Self::Everyday => "Everyday",
+            Self::Performance => "Responsive",
+        }
+    }
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Quiet => "Disable CPU boost and favor energy savings.",
+            Self::Everyday => "Enable efficient boost for everyday workloads.",
+            Self::Performance => "Favor fast response and performance while allowing idle clocks.",
+        }
+    }
+    pub fn draft(self, controls: &[Control]) -> Result<Vec<Control>, String> {
+        let mut result = controls.to_vec();
+        let boost = controls
+            .iter()
+            .find(|c| c.key == Setting::Boost)
+            .ok_or("CPU boost control is required for this preset.")?;
+        let modes: &[u32] = match self {
+            Self::Quiet => &[0],
+            Self::Everyday => &[3, 1],
+            Self::Performance => &[2, 1],
+        };
+        let boost_value = modes
+            .iter()
+            .find(|v| boost.allowed.contains(**v))
+            .ok_or("This preset requires an unavailable boost mode.")?;
+        for control in &mut result {
+            control.value = match control.key {
+                Setting::Minimum => 5,
+                Setting::Maximum => 100,
+                Setting::Boost => *boost_value,
+                Setting::EnergyPreference => match self {
+                    Self::Quiet => 80,
+                    Self::Everyday => 50,
+                    Self::Performance => 0,
+                },
+            };
+        }
+        check_values(controls, &values(&result))?;
+        Ok(result)
+    }
 }
 
 fn check_values(controls: &[Control], proposed: &[(Setting, u32)]) -> Result<(), String> {
@@ -270,6 +333,17 @@ impl<B: Backend> Session<B> {
         });
         Ok(format!("{name} is now active."))
     }
+    pub fn activate_ultimate(&mut self, expected: PlanId) -> Result<String, String> {
+        let snapshot = self.snapshot()?;
+        if snapshot.active != expected {
+            return Err("The active Windows plan changed. Refresh and try again.".into());
+        }
+        let plan = match snapshot.ultimate_plan {
+            Some(plan) => plan,
+            None => self.backend.install_ultimate()?,
+        };
+        self.activate(expected, plan)
+    }
     fn switch(&mut self, before: PlanId, after: PlanId) -> Result<(), String> {
         let result = self.backend.activate(after).and_then(|_| {
             if self.backend.active()? == after {
@@ -303,6 +377,9 @@ impl<B: Backend> Session<B> {
     }
     pub fn apply(&mut self, edit: Edit) -> Result<String, String> {
         let snapshot = self.snapshot()?;
+        if edit.source == Source::Dc && !snapshot.has_battery {
+            return Err("Battery settings are unavailable on this PC.".into());
+        }
         if snapshot.active != edit.plan {
             return Err("The active plan changed. Reload current values before applying.".into());
         }

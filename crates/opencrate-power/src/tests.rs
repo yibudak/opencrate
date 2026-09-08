@@ -48,6 +48,8 @@ impl Fake {
                 cpu: [cpu.clone(), cpu],
                 source: Some(Source::Ac),
                 battery_percent: None,
+                has_battery: true,
+                ultimate_plan: None,
                 can_undo: false,
             },
             writes: vec![],
@@ -59,6 +61,14 @@ impl Fake {
     }
 }
 impl Backend for Fake {
+    fn install_ultimate(&mut self) -> Result<PlanId, String> {
+        self.snapshot.plans.push(Plan {
+            id: OPENCRATE_ULTIMATE,
+            name: "Ultimate Performance".into(),
+        });
+        self.snapshot.ultimate_plan = Some(OPENCRATE_ULTIMATE);
+        Ok(OPENCRATE_ULTIMATE)
+    }
     fn snapshot(&mut self) -> Result<Snapshot, String> {
         Ok(self.snapshot.clone())
     }
@@ -99,6 +109,92 @@ impl Backend for Fake {
             Ok(())
         }
     }
+}
+
+#[test]
+fn ultimate_install_reuses_copy_and_undo_restores_previous_plan() {
+    let mut session = Session::new(Fake::new());
+    session.activate_ultimate(BALANCED).unwrap();
+    assert_eq!(session.backend.snapshot.active, OPENCRATE_ULTIMATE);
+    assert_eq!(session.backend.snapshot.plans.len(), 3);
+    session.undo().unwrap();
+    assert_eq!(session.backend.snapshot.active, BALANCED);
+    session.activate_ultimate(BALANCED).unwrap();
+    assert_eq!(session.backend.snapshot.plans.len(), 3);
+}
+
+#[test]
+fn ultimate_uses_an_existing_copy_with_a_different_guid() {
+    let mut fake = Fake::new();
+    fake.snapshot.plans.push(Plan {
+        id: 123,
+        name: "Nihai Performans".into(),
+    });
+    fake.snapshot.ultimate_plan = Some(123);
+    let mut session = Session::new(fake);
+    session.activate_ultimate(BALANCED).unwrap();
+    assert_eq!(session.backend.snapshot.active, 123);
+    assert_eq!(session.backend.snapshot.plans.len(), 3);
+}
+
+#[test]
+fn stale_ultimate_request_does_not_install_and_failed_activation_restores_plan() {
+    let mut session = Session::new(Fake::new());
+    assert!(session.activate_ultimate(HIGH_PERFORMANCE).is_err());
+    assert_eq!(session.backend.snapshot.plans.len(), 2);
+    session.backend.fail_activation = true;
+    assert!(session.activate_ultimate(BALANCED).is_err());
+    assert_eq!(session.backend.snapshot.active, BALANCED);
+}
+
+#[test]
+fn desktop_rejects_battery_writes() {
+    let mut session = Session::new(Fake::new());
+    session.backend.snapshot.has_battery = false;
+    let edit = edit(&mut session, Source::Dc, &[(Setting::Maximum, 90)]);
+    assert!(session.apply(edit).is_err());
+    assert!(session.backend.writes.is_empty());
+}
+
+#[test]
+fn presets_are_validated_drafts_and_apply_undo_preserves_battery_values() {
+    let mut session = Session::new(Fake::new());
+    let before = session.snapshot().unwrap();
+    let controls = CpuPreset::Quiet.draft(&before.cpu[0].controls).unwrap();
+    assert_eq!(
+        values(&session.snapshot().unwrap().cpu[0].controls),
+        values(&before.cpu[0].controls)
+    );
+    assert!(controls
+        .iter()
+        .any(|c| c.key == Setting::Boost && c.value == 0));
+    session
+        .apply(Edit {
+            plan: before.active,
+            source: Source::Ac,
+            expected: values(&before.cpu[0].controls),
+            values: values(&controls),
+        })
+        .unwrap();
+    assert_eq!(
+        values(&session.snapshot().unwrap().cpu[1].controls),
+        values(&before.cpu[1].controls)
+    );
+    session.undo().unwrap();
+    assert_eq!(
+        values(&session.snapshot().unwrap().cpu[0].controls),
+        values(&before.cpu[0].controls)
+    );
+}
+
+#[test]
+fn presets_reject_unavailable_modes_and_policy_protected_values() {
+    let mut controls = Fake::new().snapshot.cpu[0].controls.clone();
+    assert!(CpuPreset::Everyday.draft(&controls).is_err()); // Firmware defines only 0 and 2.
+    controls[2].write_error = Some("Managed by policy".into());
+    assert!(CpuPreset::Quiet.draft(&controls).is_err());
+    controls.remove(2);
+    assert!(CpuPreset::Performance.draft(&controls).is_err());
 }
 fn edit(session: &mut Session<Fake>, source: Source, changes: &[(Setting, u32)]) -> Edit {
     let snapshot = session.snapshot().unwrap();
