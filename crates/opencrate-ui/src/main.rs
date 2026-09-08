@@ -28,7 +28,7 @@ use opencrate_core::{EffectMode, RgbColor};
 use std::time::{Duration, Instant};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
-    Icon, TrayIconBuilder,
+    Icon, MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
 };
 
 /// A one-click lighting preset.
@@ -106,6 +106,8 @@ struct App {
     _tray: tray_icon::TrayIcon,
     #[cfg(feature = "diagnostics")]
     diagnostic_tray_handler: std::sync::Arc<dyn Fn(MenuEvent) + Send + Sync>,
+    #[cfg(feature = "diagnostics")]
+    diagnostic_tray_icon_handler: std::sync::Arc<dyn Fn(TrayIconEvent) + Send + Sync>,
 }
 
 impl App {
@@ -204,8 +206,31 @@ impl App {
         let quit_id = quit.id().0.clone();
         menu.append(&quit).expect("tray menu");
 
-        #[cfg(feature = "diagnostics")]
         let tray_handler = std::sync::Arc::new(tray_handler);
+        let show_handler = tray_handler.clone();
+        let show_menu_id = show.id().clone();
+        let tray_icon_handler = move |event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+            ) {
+                show_handler(MenuEvent {
+                    id: show_menu_id.clone(),
+                });
+            }
+        };
+        #[cfg(feature = "diagnostics")]
+        let tray_icon_handler = std::sync::Arc::new(tray_icon_handler);
+        #[cfg(feature = "diagnostics")]
+        let diagnostic_tray_icon_handler = tray_icon_handler.clone();
+        #[cfg(feature = "diagnostics")]
+        TrayIconEvent::set_event_handler(Some(move |event| tray_icon_handler(event)));
+        #[cfg(not(feature = "diagnostics"))]
+        TrayIconEvent::set_event_handler(Some(tray_icon_handler));
         #[cfg(feature = "diagnostics")]
         let diagnostic_tray_handler = tray_handler.clone();
         MenuEvent::set_event_handler(Some(move |event| tray_handler(event)));
@@ -214,6 +239,7 @@ impl App {
         let icon = Icon::from_rgba(rgba, w, h).expect("tray icon");
         let tray = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
+            .with_menu_on_left_click(false)
             .with_tooltip(t("OpenCrate — Hardware control"))
             .with_icon(icon)
             .build()
@@ -252,6 +278,8 @@ impl App {
             _tray: tray,
             #[cfg(feature = "diagnostics")]
             diagnostic_tray_handler,
+            #[cfg(feature = "diagnostics")]
+            diagnostic_tray_icon_handler,
         };
         if let Some(settings) = restore {
             app.startup_restore = Some(StartupRestore {
