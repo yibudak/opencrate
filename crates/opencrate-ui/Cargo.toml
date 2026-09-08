@@ -28,6 +28,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tray-icon = "0.20"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls"] }
+semver = "1"
+sha2 = "0.10"
+tempfile = "3"
 
 [build-dependencies]
 embed-resource = "3"

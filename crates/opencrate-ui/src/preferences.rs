@@ -62,6 +62,7 @@ pub struct Preferences {
     pub theme: crate::theme::ThemePreference,
     pub restore_lighting: bool,
     pub start_in_tray: bool,
+    pub check_updates: bool,
     pub last_lighting: Option<SavedLighting>,
 }
 
@@ -73,6 +74,7 @@ impl Default for Preferences {
             theme: crate::theme::ThemePreference::System,
             restore_lighting: true,
             start_in_tray: true,
+            check_updates: true,
             last_lighting: None,
         }
     }
@@ -203,6 +205,18 @@ mod tests {
     use super::*;
     use crate::theme::ThemePreference;
     use opencrate_core::{EffectMode, RgbColor};
+
+    #[test]
+    fn update_checks_default_on_and_opt_out_survives_roundtrip() {
+        let mut preferences = Preferences::parse(r#"{"version":1,"start_in_tray":false}"#).unwrap();
+        assert!(preferences.check_updates);
+        assert!(!preferences.start_in_tray);
+        preferences.check_updates = false;
+        assert_eq!(
+            Preferences::parse(&serde_json::to_string(&preferences).unwrap()).unwrap(),
+            preferences
+        );
+    }
 
     #[test]
     fn theme_migration_and_roundtrip_preserve_existing_preferences() {

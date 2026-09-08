@@ -56,6 +56,7 @@ pub fn run() {
     let mut store = preferences::Store::load_path(output.join("preferences.json"));
     store.preferences = preferences::Preferences::default();
     store.preferences.restore_lighting = false;
+    store.preferences.check_updates = false;
     let instance = windows_startup::Instance::diagnostic().expect("isolated diagnostic instance");
     let _ = *START;
     let result = runtime::run(store, instance, start_hidden());

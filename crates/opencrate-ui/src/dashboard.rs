@@ -182,6 +182,13 @@ impl App {
                     );
                     ui.add_space(12.0);
                     self.nav_item(ui, Page::Settings, t("Settings"), Icon::Settings, false);
+                    if self.updates.available()
+                        && ui
+                            .button(RichText::new(t("Update available")).color(colors.accent))
+                            .clicked()
+                    {
+                        self.ui.page = Page::Settings;
+                    }
                 });
             });
     }
@@ -498,6 +505,8 @@ impl App {
             colors.muted,
         );
         let mut autostart = self.autostart;
+        self.updates_card(ui);
+        ui.add_space(12.0);
         let mut preferences_changed = false;
         let mut language = self.store.preferences.language;
         card(ui).show(ui, |ui| {
