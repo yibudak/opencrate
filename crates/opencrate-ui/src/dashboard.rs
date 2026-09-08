@@ -593,30 +593,48 @@ impl App {
         card(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             subtitle(ui, t("Close to tray"));
-            ui.label(RichText::new(t("Closing the window keeps lighting and fan control running. Use Show OpenCrate in the tray menu to return, or Quit to exit.")).color(colors.muted));
+            ui.label(RichText::new(t("Closing the window keeps lighting and fan control running. Left-click the tray icon to return, or choose Quit in its menu to exit.")).color(colors.muted));
             ui.add_space(2.0);
             ui.label(RichText::new(t("When you quit, lighting switches to a built-in effect. Dimmed multicolor animations remain as a static color.")).size(12.0).color(colors.muted));
             ui.label(RichText::new(t("Fan changes are temporary. Quit restores the curves that were active before your changes; fan settings are not restored on Windows startup.")).size(12.0).color(colors.muted));
         });
         ui.add_space(14.0);
-        subtitle(ui, t("About"));
-        ui.horizontal(|ui| {
-            ui.add(egui::Image::new((self.ui.logo.id(), vec2(40.0, 40.0))).corner_radius(8));
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 3.0;
-                ui.label(RichText::new(concat!("OpenCrate ", env!("CARGO_PKG_VERSION"))).strong());
-                ui.label(
-                    RichText::new(t("An open-source alternative to Armoury Crate. RGB lighting, fan and power controls."))
-                        .size(12.0)
-                        .color(colors.muted),
-                );
+        card(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            subtitle(ui, t("About"));
+            ui.horizontal(|ui| {
+                ui.add(egui::Image::new((self.ui.logo.id(), vec2(40.0, 40.0))).corner_radius(8));
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 3.0;
+                    ui.label(RichText::new(concat!("OpenCrate ", env!("CARGO_PKG_VERSION"))).strong());
+                    ui.label(
+                        RichText::new(t("An open-source alternative to Armoury Crate. RGB lighting, fan and power controls."))
+                            .size(12.0)
+                            .color(colors.muted),
+                    );
+                });
             });
+            ui.add_space(6.0);
+            ui.label(t("Developed by Yiğit Budak (yibudak)."));
+            ui.hyperlink_to(t("Visit yibudak on GitHub"), "https://github.com/yibudak");
+            ui.separator();
+            ui.label(
+                RichText::new(t("Enjoying OpenCrate? Star the repository on GitHub to support the project."))
+                    .color(colors.muted),
+            );
+            if ui.add(
+                egui::Button::new(RichText::new(t("Star OpenCrate on GitHub")).strong().color(colors.on_accent))
+                    .fill(colors.accent),
+            ).clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(env!("CARGO_PKG_REPOSITORY")));
+            }
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS."))
+                    .size(12.0)
+                    .color(colors.muted),
+            );
         });
-        ui.label(
-            RichText::new(t("OpenCrate is an independent project. It is not affiliated with, supported or endorsed by ASUS."))
-                .size(12.0)
-                .color(colors.muted),
-        );
         for error in [&self.startup_error, &self.store.error]
             .into_iter()
             .flatten()
