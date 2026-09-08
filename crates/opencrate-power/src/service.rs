@@ -8,6 +8,7 @@ use std::{
 pub enum Command {
     Refresh,
     Activate { expected: PlanId, plan: PlanId },
+    ActivateUltimate { expected: PlanId },
     Apply(Edit),
     Undo,
     Stop,
@@ -55,6 +56,9 @@ impl Controller {
                             }
                             Some(Command::Activate { expected, plan }) => {
                                 Some(session.activate(expected, plan))
+                            }
+                            Some(Command::ActivateUltimate { expected }) => {
+                                Some(session.activate_ultimate(expected))
                             }
                             Some(Command::Apply(edit)) => Some(session.apply(edit)),
                             Some(Command::Undo) => Some(session.undo()),

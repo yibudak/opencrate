@@ -15,6 +15,11 @@ fn main() -> Result<(), String> {
     let mut session = Guard(Session::new(Windows));
     let original = session.0.snapshot()?;
     println!(
+        "Battery controls: {}, Ultimate plan: {:?}",
+        original.has_battery,
+        original.ultimate_plan.map(|id| format!("{id:032x}"))
+    );
+    println!(
         "Active: {} ({:032x}), source: {:?}",
         original.active_name(),
         original.active,
@@ -56,6 +61,9 @@ fn main() -> Result<(), String> {
     }
     for source in [Source::Ac, Source::Dc] {
         let snapshot = session.0.snapshot()?;
+        if source == Source::Dc && !snapshot.has_battery {
+            continue;
+        }
         let controls = &snapshot.cpu[source.index()].controls;
         let proposed: Vec<_> = controls
             .iter()

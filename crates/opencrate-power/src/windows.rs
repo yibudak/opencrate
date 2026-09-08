@@ -193,6 +193,28 @@ fn allowed(key: Setting) -> Result<Allowed, String> {
 }
 
 impl Backend for Windows {
+    fn install_ultimate(&mut self) -> Result<PlanId, String> {
+        let current = plans()?;
+        if let Some(plan) = ultimate_plan(&current) {
+            return Ok(plan);
+        }
+        let mut destination = GUID::from_u128(OPENCRATE_ULTIMATE);
+        let mut pointer = &mut destination as *mut GUID;
+        check(
+            unsafe {
+                PowerDuplicateScheme(
+                    null_mut(),
+                    &GUID::from_u128(ULTIMATE_PERFORMANCE),
+                    &mut pointer,
+                )
+            },
+            "Install Ultimate Performance",
+        )?;
+        if !plans()?.iter().any(|p| p.id == OPENCRATE_ULTIMATE) {
+            return Err("Windows did not install the Ultimate Performance plan.".into());
+        }
+        Ok(OPENCRATE_ULTIMATE)
+    }
     fn snapshot(&mut self) -> Result<Snapshot, String> {
         let active = self.active()?;
         let mut plans = plans()?;
@@ -248,17 +270,33 @@ impl Backend for Windows {
         } else {
             None
         };
-        let battery_percent = (ok
+        let mut capabilities = SYSTEM_POWER_CAPABILITIES::default();
+        let capabilities_ok = unsafe { GetPwrCapabilities(&mut capabilities) };
+        let role = unsafe { PowerDeterminePlatformRoleEx(2) };
+        let has_battery = battery_available(
+            role == PlatformRoleDesktop
+                || role == PlatformRoleWorkstation
+                || role == PlatformRoleEnterpriseServer,
+            capabilities_ok.then_some((
+                capabilities.SystemBatteriesPresent,
+                capabilities.BatteriesAreShortTerm,
+            )),
+            ok.then_some(status.BatteryFlag),
+        );
+        let battery_percent = (has_battery
+            && ok
             && status.BatteryFlag != 255
             && status.BatteryFlag & 128 == 0
             && status.BatteryLifePercent <= 100)
             .then_some(status.BatteryLifePercent);
         Ok(Snapshot {
+            ultimate_plan: ultimate_plan(&plans),
             plans,
             active,
             cpu,
             source,
             battery_percent,
+            has_battery,
             can_undo: false,
         })
     }
@@ -322,6 +360,36 @@ impl Backend for Windows {
     }
 }
 
+fn ultimate_plan(plans: &[Plan]) -> Option<PlanId> {
+    // A copied Windows template has a new GUID. Its localized friendly name is
+    // only a discovery hint; activation always uses the enumerated GUID.
+    let template_name = name(ULTIMATE_PERFORMANCE).ok();
+    find_ultimate_plan(plans, template_name.as_deref())
+}
+
+fn find_ultimate_plan(plans: &[Plan], template_name: Option<&str>) -> Option<PlanId> {
+    plans
+        .iter()
+        .find(|p| p.id == ULTIMATE_PERFORMANCE || p.id == OPENCRATE_ULTIMATE)
+        .or_else(|| {
+            plans.iter().find(|p| {
+                !matches!(p.id, BALANCED | POWER_SAVER | HIGH_PERFORMANCE)
+                    && template_name == Some(p.name.as_str())
+            })
+        })
+        .map(|p| p.id)
+}
+
+fn battery_available(desktop: bool, capabilities: Option<(bool, bool)>, flag: Option<u8>) -> bool {
+    if desktop {
+        return false;
+    }
+    if let Some((present, short_term)) = capabilities {
+        return present && !short_term;
+    }
+    flag.is_some_and(|f| f != 255 && f & 128 == 0)
+}
+
 #[cfg(test)]
 mod pointer_tests {
     use super::*;
@@ -329,6 +397,40 @@ mod pointer_tests {
         Foundation::ERROR_ACCESS_DENIED,
         System::Memory::{LocalAlloc, LMEM_FIXED},
     };
+
+    #[test]
+    fn ultimate_discovery_accepts_localized_copies_but_not_renamed_standard_plans() {
+        let mut plans = vec![Plan {
+            id: BALANCED,
+            name: "Nihai Performans".into(),
+        }];
+        assert_eq!(find_ultimate_plan(&plans, Some("Nihai Performans")), None);
+        plans.push(Plan {
+            id: 123,
+            name: "Nihai Performans".into(),
+        });
+        assert_eq!(
+            find_ultimate_plan(&plans, Some("Nihai Performans")),
+            Some(123)
+        );
+        plans.push(Plan {
+            id: OPENCRATE_ULTIMATE,
+            name: "Custom name".into(),
+        });
+        assert_eq!(find_ultimate_plan(&plans, None), Some(OPENCRATE_ULTIMATE));
+    }
+
+    #[test]
+    fn battery_detection_distinguishes_desktops_ups_laptops_and_unknown_status() {
+        assert!(!battery_available(true, Some((true, false)), Some(1)));
+        assert!(!battery_available(false, Some((true, true)), Some(1)));
+        assert!(!battery_available(false, Some((false, false)), Some(128)));
+        assert!(battery_available(false, Some((true, false)), Some(255)));
+        assert!(battery_available(false, None, Some(8)));
+        assert!(!battery_available(false, None, Some(128)));
+        assert!(!battery_available(false, None, Some(255)));
+        assert!(!battery_available(false, None, None));
+    }
 
     #[test]
     fn failed_response_never_reads_or_frees_unspecified_output() {
