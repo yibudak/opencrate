@@ -24,10 +24,7 @@ use opencrate_aura::{
     playback::{LightingController, Settings},
 };
 use opencrate_core::{EffectMode, RgbColor};
-use std::{
-    sync::mpsc,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem},
     Icon, TrayIconBuilder,
@@ -92,7 +89,6 @@ struct App {
     lighting: Option<LightingController>,
     requested: Option<Settings>,
     revision: u64,
-    tray_events: mpsc::Receiver<MenuEvent>,
     show_id: String,
     preset_ids: Vec<String>,
     quit_id: String,
@@ -105,6 +101,8 @@ struct App {
     instance: windows_startup::Instance,
     window: window_activation::WindowActivation,
     _tray: tray_icon::TrayIcon,
+    #[cfg(feature = "diagnostics")]
+    diagnostic_tray_handler: std::sync::Arc<dyn Fn(MenuEvent) + Send + Sync>,
 }
 
 impl App {
@@ -146,6 +144,7 @@ impl App {
         native_window: &winit::window::Window,
         store: preferences::Store,
         mut instance: windows_startup::Instance,
+        tray_handler: impl Fn(MenuEvent) + Send + Sync + 'static,
     ) -> std::io::Result<Self> {
         i18n::set_language(store.preferences.language);
         store.preferences.theme.apply(ctx);
@@ -181,7 +180,6 @@ impl App {
                 vec![("details", error.to_string())],
             ),
         };
-        let (tray_sender, tray_events) = mpsc::channel();
         let menu = Menu::new();
         let show = MenuItem::new(t("Show OpenCrate"), true, None);
         let mut tray_items = vec![(show.clone(), "Show OpenCrate")];
@@ -203,20 +201,11 @@ impl App {
         let quit_id = quit.id().0.clone();
         menu.append(&quit).expect("tray menu");
 
-        let wake = ctx.clone();
-        let activate = window.clone();
-        let show_event_id = show_id.clone();
-        MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-            let show = event.id().0 == show_event_id;
-            let _ = tray_sender.send(event);
-            // A hidden HWND may not repaint. Reveal it before asking egui to
-            // consume the menu event, rather than waiting inside App::update.
-            if show {
-                activate.show();
-            } else {
-                wake.request_repaint();
-            }
-        }));
+        #[cfg(feature = "diagnostics")]
+        let tray_handler = std::sync::Arc::new(tray_handler);
+        #[cfg(feature = "diagnostics")]
+        let diagnostic_tray_handler = tray_handler.clone();
+        MenuEvent::set_event_handler(Some(move |event| tray_handler(event)));
 
         let (rgba, w, h) = tray_icon_rgba();
         let icon = Icon::from_rgba(rgba, w, h).expect("tray icon");
@@ -244,7 +233,6 @@ impl App {
             lighting: lighting.ok(),
             requested: None,
             revision: 0,
-            tray_events,
             show_id,
             preset_ids,
             quit_id,
@@ -257,6 +245,8 @@ impl App {
             instance,
             window,
             _tray: tray,
+            #[cfg(feature = "diagnostics")]
+            diagnostic_tray_handler,
         };
         if let Some(settings) = restore {
             app.startup_restore = Some(StartupRestore {
@@ -355,21 +345,14 @@ impl App {
         }
     }
 
-    fn poll_tray(&mut self, ctx: &egui::Context) {
-        while let Ok(ev) = self.tray_events.try_recv() {
-            let id = ev.id().0.clone();
-            if id == self.quit_id {
-                self.quit_requested = true;
-            } else if id == self.show_id {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-            } else if let Some(idx) = self.preset_ids.iter().position(|p| p == &id) {
-                self.apply_preset(idx);
-            }
-        }
-        if self.quit_requested {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    fn handle_tray_event(&mut self, event: MenuEvent) {
+        let id = &event.id().0;
+        if id == &self.quit_id {
+            self.quit_requested = true;
+        } else if id == &self.show_id {
+            self.window.show();
+        } else if let Some(idx) = self.preset_ids.iter().position(|p| p == id) {
+            self.apply_preset(idx);
         }
     }
 
@@ -410,7 +393,9 @@ impl App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
-        self.poll_tray(ctx);
+        if self.quit_requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         self.poll_lighting(ctx);
         self.poll_preferences(ctx);
         self.fans.poll();
