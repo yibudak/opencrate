@@ -379,7 +379,7 @@ pub fn run(
     store: preferences::Store,
     instance: windows_startup::Instance,
     hidden: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<crate::updates::PendingInstall, Box<dyn Error>> {
     let event_loop = EventLoop::<Event>::with_user_event().build()?;
     let mut host = Host {
         startup: Some((store, instance, hidden)),
@@ -392,7 +392,12 @@ pub fn run(
     if let Some(error) = host.error {
         return Err(error);
     }
-    Ok(())
+    // Transfer only the verified download. Host and App are dropped before the
+    // caller can launch Setup, releasing the hardware workers and instance lock.
+    Ok(host
+        .running
+        .as_mut()
+        .and_then(|running| running.app.install_after_exit.take()))
 }
 
 #[cfg(test)]

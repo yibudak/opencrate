@@ -48,6 +48,32 @@ class PrivacyTests(unittest.TestCase):
         failed, _ = self.inspect(str(privacy.ROOT).encode(), payload=True)
         self.assertTrue(failed)
 
+    def test_only_exact_tls_parser_literals_are_allowed_in_executable_payloads(self):
+        begin = "-----BEGIN " + "PRIVATE KEY-----"
+        end = "-----END " + "PRIVATE KEY-----"
+        guards = (
+            begin + "not a PKCS#8 key",
+            begin + end,
+            f"expected '{begin}'and '{end}' PEM guards",
+        )
+        for guard in guards:
+            for encoding in ("utf-8", "utf-16-le"):
+                data = guard.encode(encoding)
+                self.assertFalse(self.inspect(data, ".exe", payload=True)[0])
+                self.assertTrue(self.inspect(data, ".exe")[0])
+                self.assertTrue(self.inspect(data, ".txt", payload=True)[0])
+        # A separate key is still rejected beside a recognized parser constant.
+        # Both complete and truncated synthetic keys must be detected, in either
+        # encoding, without printing any content from them.
+        for kind in ("", "RSA ", "EC ", "OPENSSH "):
+            header = "-----BEGIN " + kind + "PRIVATE KEY-----"
+            for key in (header, header + "\nU3ludGhldGljS2V5\n" + end):
+                for encoding in ("utf-8", "utf-16-le"):
+                    data = ("\0".join(guards) + "\0" + key).encode(encoding)
+                    failed, output = self.inspect(data, ".exe", payload=True)
+                    self.assertTrue(failed)
+                    self.assertNotIn("U3ludGhldGljS2V5", output)
+
     def test_png_and_embedded_ico_metadata_are_detected(self):
         chunk = b"tEXt"
         png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 0) + chunk + bytes(4)

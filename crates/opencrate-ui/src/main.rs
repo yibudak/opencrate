@@ -15,6 +15,7 @@ mod preferences;
 mod runtime;
 mod software;
 mod theme;
+mod updates;
 mod window_activation;
 mod windows_startup;
 
@@ -95,6 +96,8 @@ struct App {
     tray_items: Vec<(MenuItem, &'static str)>,
     quit_requested: bool,
     store: preferences::Store,
+    updates: updates::State,
+    install_after_exit: updates::PendingInstall,
     autostart: bool,
     startup_error: Option<String>,
     startup_restore: Option<StartupRestore>,
@@ -239,6 +242,8 @@ impl App {
             tray_items,
             quit_requested: false,
             store,
+            updates: updates::State::default(),
+            install_after_exit: None,
             autostart,
             startup_error,
             startup_restore: None,
@@ -255,6 +260,9 @@ impl App {
                 retry_at: None,
             });
             app.enqueue(settings);
+        }
+        if app.store.preferences.check_updates {
+            app.updates.check(ctx);
         }
         Ok(app)
     }
@@ -400,6 +408,7 @@ impl App {
         self.poll_preferences(ctx);
         self.fans.poll();
         self.power.poll();
+        self.updates.poll(ctx, self.store.preferences.check_updates);
 
         if draw {
             self.render_dashboard(ctx);
@@ -424,8 +433,20 @@ fn main() {
     };
     let store = preferences::Store::load();
     let start_hidden = from_startup && store.preferences.start_in_tray && store.error.is_none();
-    if let Err(e) = runtime::run(store, instance, start_hidden) {
-        eprintln!("opencrate-ui failed: {e}");
-        std::process::exit(1);
+    match runtime::run(store, instance, start_hidden) {
+        Ok(Some((installer, language))) => {
+            // The runtime has dropped App, restored fans and released AppMutex.
+            if let Err(error) = installer.launch(language) {
+                updates::show_launch_error(&error, language);
+                if let Ok(executable) = std::env::current_exe() {
+                    let _ = std::process::Command::new(executable).spawn();
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("opencrate-ui failed: {error}");
+            std::process::exit(1);
+        }
     }
 }

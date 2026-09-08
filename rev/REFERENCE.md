@@ -58,6 +58,12 @@ Closing the window keeps OpenCrate running in the tray. Choose **Show OpenCrate*
 
 For reproducible, hardware-free memory and CPU measurements, run `python scripts/test-ui-runtime.py` on Windows. Add `--start-hidden` to test launching directly into the tray. These checks build an opt-in diagnostic executable, use isolated preferences and instance names, and save measurements and rendered screenshots under `target`. Normal installer builds omit diagnostic support. See [performance notes](performance.md) for the measurement method and limits.
 
+## Updates
+
+**Settings → Updates** checks the latest stable GitHub release at launch and every 24 hours while running, including in the tray. Automatic checks can be disabled (`check_updates` in the preferences file); manual checks remain available. GitHub receives ordinary update requests, with no hardware information or credentials attached. Network failures do not interrupt hardware controls.
+
+Choose **Download update**, then **Install update**. Downloads show progress, support cancellation, and must match the release's SHA-256 checksum and declared file size before Setup can run. OpenCrate saves preferences and exits normally before opening the interactive installer, which can reopen the app on completion. The existing install location and preferences are preserved; temporary fan overrides are restored as on normal Quit. Downloads are stored under `%LOCALAPPDATA%\opencrate\updates`; incomplete downloads are discarded on failure/cancellation, and caches older than seven days are cleaned on the next download. Checksums detect corruption; they are not publisher signatures.
+
 ## Project layout
 
 | Directory | Purpose |

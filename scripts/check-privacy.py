@@ -93,6 +93,24 @@ def image_metadata(path, data):
     return False
 
 
+def without_tls_parser_literals(view):
+    """Ignore exact adjacent parser constants, never a PEM header plus key data.
+
+    Reviewed in native-tls 0.2.18 src/imp/schannel.rs and schannel 0.1.29
+    src/crypt_prov.rs. Rust concatenates these immutable strings in the PE.
+    Source files and non-executable payload files retain the strict marker check.
+    """
+    begin = "-----BEGIN " + "PRIVATE KEY-----"
+    end = "-----END " + "PRIVATE KEY-----"
+    for literal in (
+        f"expected '{begin}'and '{end}' PEM guards",
+        begin + "not a PKCS#8 key",
+        begin + end,
+    ):
+        view = view.replace(literal, "")
+    return view
+
+
 def inspect(path, label, payload=False):
     findings = []
     data = path.read_bytes()
@@ -106,7 +124,10 @@ def inspect(path, label, payload=False):
             data[1:].decode("utf-16-le", errors="ignore"),
         ]
     for description, pattern in PATTERNS.items():
-        if any(pattern.search(view) for view in views):
+        checked_views = views
+        if payload and path.suffix.lower() == ".exe" and description == "private key":
+            checked_views = [without_tls_parser_literals(view) for view in views]
+        if any(pattern.search(view) for view in checked_views):
             findings.append(description)
     if payload:
         roots = [str(ROOT), os.environ.get("USERPROFILE"), os.environ.get("CARGO_HOME")]

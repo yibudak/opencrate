@@ -44,6 +44,7 @@ Windows power controls work independently; available options depend on your PC.
 | --- | --- |
 | Change the language | **Settings → Application language**. English, 简体中文 and Türkçe are included. |
 | Change the appearance | **Settings → Appearance**. Choose **System**, **Light** or **Dark**. |
+| Update the app | **Settings → Updates**. Check, download and start Setup without opening a browser. |
 | Start the app with your PC | Turn on **Launch with Windows** in Settings. |
 | Keep it running in the background | Close the window. OpenCrate stays in the icon area next to the Windows clock. |
 | Exit completely | Right-click the OpenCrate icon next to the clock → **Quit**. |
@@ -52,7 +53,8 @@ Windows power controls work independently; available options depend on your PC.
 <details>
 <summary><strong>Updating, uninstalling or wondering what happens when you quit?</strong></summary>
 
-- **Update:** Choose **Quit** from the OpenCrate icon menu, then run the new installer. Your preferences are kept.
+- **Update:** In **Settings → Updates**, choose **Download update**, then **Install update**. OpenCrate checks the download and closes before Setup opens. Your preferences are kept. Versions before 0.1.2 need one manual upgrade: quit from the icon menu and run the new installer.
+- **Automatic checks:** Enabled at launch and every 24 hours. You can turn them off in **Settings → Updates**; downloads start only when you choose.
 - **Uninstall:** Quit first, then remove OpenCrate from Windows **Settings → Apps**. Saved preferences are kept.
 - **When you quit:** Lighting switches to a built-in effect, temporary fan changes are restored where OpenCrate still controls them, and Windows power changes stay applied.
 
