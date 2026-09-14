@@ -435,7 +435,7 @@ impl App {
         self.poll_lighting(ctx);
         self.poll_preferences(ctx);
         self.fans.poll();
-        self.power.poll();
+        self.power.poll(draw && self.ui.power_visible());
         self.updates.poll(ctx, self.store.preferences.check_updates);
 
         if draw {

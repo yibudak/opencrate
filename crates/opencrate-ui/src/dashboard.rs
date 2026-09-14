@@ -51,6 +51,9 @@ pub struct State {
 }
 
 impl State {
+    pub fn power_visible(&self) -> bool {
+        self.page == Page::Power
+    }
     #[cfg(feature = "diagnostics")]
     pub fn select_page(&mut self, page: Page) {
         self.page = page;
