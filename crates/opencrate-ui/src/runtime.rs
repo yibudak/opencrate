@@ -84,8 +84,12 @@ impl Running {
         use crate::{dashboard::Page, i18n::Language};
         match step {
             1 => self.info.events.push(egui::ViewportEvent::Close),
-            2 => (self.app.diagnostic_tray_handler)(tray_icon::menu::MenuEvent {
-                id: self.app.show_id.clone().into(),
+            2 => (self.app.diagnostic_tray_icon_handler)(tray_icon::TrayIconEvent::Click {
+                id: self.app._tray.id().clone(),
+                position: Default::default(),
+                rect: Default::default(),
+                button: tray_icon::MouseButton::Left,
+                button_state: tray_icon::MouseButtonState::Up,
             }),
             3 => self.app.change_language(Language::Turkish, &self.ctx),
             4 => self.app.change_language(Language::Chinese, &self.ctx),
@@ -315,7 +319,7 @@ impl ApplicationHandler<Event> for Host {
         }
     }
 
-    fn window_event(&mut self, _: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Some(running) = &mut self.running else {
             return;
         };
@@ -337,9 +341,16 @@ impl ApplicationHandler<Event> for Host {
                 }
                 self.schedule.request(Instant::now());
             }
-            WindowEvent::RedrawRequested
-            | WindowEvent::Resized(_)
-            | WindowEvent::ScaleFactorChanged { .. } => {
+            WindowEvent::RedrawRequested => {
+                // Windows dispatches redraws inside its modal resize loop, when
+                // about_to_wait is suspended. Lay out and paint at the live size.
+                self.schedule.take_due(Instant::now());
+                if let Err(error) = running.update(event_loop) {
+                    self.fail(event_loop, error);
+                }
+            }
+            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                running.window.request_redraw();
                 self.schedule.request(Instant::now());
             }
             _ if response.repaint => self.schedule.request(Instant::now()),
@@ -356,7 +367,11 @@ impl ApplicationHandler<Event> for Host {
         }
         if self.schedule.take_due(Instant::now()) {
             if let Some(running) = &mut self.running {
-                if let Err(error) = running.update(event_loop) {
+                if running.drawable() {
+                    running.window.request_redraw();
+                } else if let Err(error) = running.update(event_loop) {
+                    // Hidden windows still service workers, tray actions and
+                    // preferences without relying on native paint events.
                     self.fail(event_loop, error);
                 }
             }
