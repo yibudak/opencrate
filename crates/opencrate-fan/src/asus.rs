@@ -1,16 +1,16 @@
 //! Native, late-bound COM client for AsusFanControlService. All objects stay on
 //! the thread that initialized COM. No direct SuperIO or kernel driver writes.
 
-use crate::quick::{self, Change, QuickMode};
-use crate::service::{validate_custom, Fan, Point, Profile, Target};
+use crate::quick::{self, Change, QuickMode, Setting};
+use crate::service::{supported_minimum, validate_custom, Fan, Point, Profile, Target};
 use std::{collections::HashMap, marker::PhantomData, rc::Rc};
 use windows::{
     core::{IUnknown, Interface, BSTR, GUID, PCWSTR},
     Win32::System::{
         Com::{
-            CoCreateInstance, CoInitializeEx, CoUninitialize, IDispatch, CLSCTX_LOCAL_SERVER,
-            COINIT_MULTITHREADED, DISPATCH_FLAGS, DISPATCH_METHOD, DISPATCH_PROPERTYGET,
-            DISPATCH_PROPERTYPUT, DISPPARAMS,
+            CoCreateInstance, CoInitializeEx, CoUninitialize, IDispatch, CLSCTX_ALL,
+            CLSCTX_LOCAL_SERVER, COINIT_MULTITHREADED, DISPATCH_FLAGS, DISPATCH_METHOD,
+            DISPATCH_PROPERTYGET, DISPATCH_PROPERTYPUT, DISPPARAMS,
         },
         Ole::DISPID_PROPERTYPUT,
         Variant::VARIANT,
@@ -135,6 +135,7 @@ struct OwnedCurve {
 
 pub struct Session {
     controls: Dispatch,
+    sensors: Option<Dispatch>,
     owned: HashMap<u32, OwnedCurve>,
     quick_undo: Option<Vec<Change>>,
     // Rust drops fields in declaration order: release all interfaces first.
@@ -142,6 +143,35 @@ pub struct Session {
 }
 
 impl Session {
+    fn connect_sensors() -> Option<Dispatch> {
+        // aaHM.acpiHmData2 is the installed ASUS hardware-monitor provider.
+        // Its absence must not disable fan control or duty telemetry.
+        unsafe {
+            CoCreateInstance(
+                &GUID::from_u128(0x2627f8be_4482_4081_bc62_8a12ca24bdf8),
+                None,
+                CLSCTX_ALL,
+            )
+        }
+        .ok()
+        .map(Dispatch)
+    }
+
+    fn rpm_readings(&self) -> Result<Vec<(String, u32)>> {
+        let monitor = self
+            .sensors
+            .as_ref()
+            .ok_or("ASUS RPM provider unavailable")?;
+        monitor.invoke("Refresh", DISPATCH_METHOD, vec![])?;
+        let sensors = monitor.child("Sensors")?;
+        (0..sensors.count(256)?)
+            .map(|i| {
+                let sensor = sensors.item(i as i32)?;
+                Ok((sensor.string("name")?, sensor.number("current")?))
+            })
+            .collect()
+    }
+
     fn connect_controls() -> Result<Dispatch> {
         let manager = Dispatch(
             unsafe {
@@ -167,6 +197,7 @@ impl Session {
         let controls = Self::connect_controls()?;
         Ok(Self {
             controls,
+            sensors: Self::connect_sensors(),
             owned: HashMap::new(),
             quick_undo: None,
             _apartment: apartment,
@@ -175,6 +206,7 @@ impl Session {
 
     pub fn reconnect(&mut self) -> Result<()> {
         self.controls = Self::connect_controls()?;
+        self.sensors = Self::connect_sensors();
         Ok(())
     }
 
@@ -193,22 +225,40 @@ impl Session {
         let curve = read_curve(&control.child("CurrentFanCurve")?)?;
         let collection = control.child("Profiles")?;
         let mut profiles = Vec::new();
+        let mut controller_curves = Vec::new();
         for i in 0..collection.count(16)? {
             let profile = collection.item(i as i32)?;
             let name = profile.string("Name")?;
+            let Ok(points) = profile
+                .child("FanCurve")
+                .and_then(|curve| read_curve(&curve))
+            else {
+                continue;
+            };
+            controller_curves.push(points.clone());
             // Do not expose unknown/disabled/user profiles as named presets.
             // ASUS "Disable" means full speed, not stopping the fan.
-            if ["Standard", "Silent", "Turbo"].contains(&name.as_str()) {
-                let points = read_curve(&profile.child("FanCurve")?)?;
-                if points.len() == curve.len() && points.last().is_some_and(|p| p.duty == 255) {
-                    profiles.push(Profile {
-                        index: i as i32,
-                        name,
-                        curve: points,
-                    });
-                }
+            if ["Standard", "Silent", "Turbo"].contains(&name.as_str())
+                && points.len() == curve.len()
+                && points.last().is_some_and(|p| p.duty == 255)
+            {
+                profiles.push(Profile {
+                    index: i as i32,
+                    name,
+                    curve: points,
+                });
             }
         }
+        let reported_minimum =
+            u8::try_from(control.number("MinimalDuty")?).map_err(|_| "Invalid fan minimum")?;
+        let minimum = supported_minimum(
+            reported_minimum,
+            std::iter::once(curve.as_slice())
+                .chain(controller_curves.iter().map(Vec::as_slice))
+                // Keep low-speed capability after temporarily applying a
+                // faster curve, including Full Blast.
+                .chain(self.owned.get(&id).map(|o| o.original.as_slice())),
+        );
         Ok(Fan {
             id,
             name: control
@@ -216,8 +266,8 @@ impl Session {
                 .or_else(|_| control.string("Name"))?,
             duty: u8::try_from(control.number("DutyCycle")?)
                 .map_err(|_| "Invalid duty readback")?,
-            minimum: u8::try_from(control.number("MinimalDuty")?)
-                .map_err(|_| "Invalid fan minimum")?,
+            rpm: None,
+            minimum,
             writable: !control.boolean("IsRpmMode")? && (4..=10).contains(&curve.len()),
             can_restore: self.owned.contains_key(&id),
             curve,
@@ -226,8 +276,18 @@ impl Session {
     }
 
     pub fn snapshot(&self) -> Result<Vec<Fan>> {
+        let readings = self.rpm_readings().unwrap_or_default();
         (0..self.controls.count(32)?)
-            .map(|i| self.read_fan(&self.controls.item(i as i32)?))
+            .map(|i| {
+                let control = self.controls.item(i as i32)?;
+                let mut fan = self.read_fan(&control)?;
+                // DisplayName can be user-edited; match the stable ASUS Name.
+                fan.rpm = control
+                    .string("Name")
+                    .ok()
+                    .and_then(|name| match_rpm(&readings, &name));
+                Ok(fan)
+            })
             .collect()
     }
 
@@ -388,6 +448,17 @@ impl Session {
         ))
     }
 
+    pub fn apply_group(&mut self, ids: &[u32], setting: &Setting) -> Result<String> {
+        let fans = self.snapshot()?;
+        let changes = quick::plan_group(&fans, ids, setting)?;
+        if changes.is_empty() {
+            return Ok("Selected fans already use these settings.".into());
+        }
+        self.apply_changes(&changes)?;
+        self.quick_undo = Some(changes);
+        Ok(format!("Settings applied once to {} fans.", ids.len()))
+    }
+
     pub fn undo_quick(&mut self) -> Result<String> {
         let fans = self.snapshot()?;
         if !self.can_undo_quick(&fans) {
@@ -440,6 +511,15 @@ impl Session {
     }
 }
 
+fn match_rpm(readings: &[(String, u32)], name: &str) -> Option<u32> {
+    let mut matches = readings
+        .iter()
+        .filter(|(n, _)| n.trim().eq_ignore_ascii_case(name.trim()));
+    let (_, rpm) = matches.next()?;
+    // Ambiguous names and sentinel values must never look like live RPM.
+    (matches.next().is_none() && *rpm < u16::MAX.into()).then_some(*rpm)
+}
+
 impl Drop for Session {
     fn drop(&mut self) {
         // Covers command-channel disconnects, early returns, and unwinding as
@@ -447,5 +527,21 @@ impl Drop for Session {
         for error in self.restore_owned() {
             eprintln!("Fan restore failed: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rpm_matching_preserves_zero_and_rejects_missing_ambiguous_or_invalid_readings() {
+        let mut readings = vec![("CPU Fan".into(), 760), ("Chassis Fan 1".into(), 0)];
+        assert_eq!(match_rpm(&readings, "cpu fan"), Some(760));
+        assert_eq!(match_rpm(&readings, "Chassis Fan 1"), Some(0));
+        assert_eq!(match_rpm(&readings, "Chassis Fan 2"), None);
+        readings.push(("CPU Fan".into(), 900));
+        assert_eq!(match_rpm(&readings, "CPU Fan"), None);
+        assert_eq!(match_rpm(&[("CPU Fan".into(), u32::MAX)], "CPU Fan"), None);
     }
 }

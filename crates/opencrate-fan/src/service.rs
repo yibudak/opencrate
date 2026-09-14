@@ -36,6 +36,9 @@ pub struct Fan {
     pub id: u32,
     pub name: String,
     pub duty: u8,
+    /// Measured tachometer speed. None means unavailable, not a stopped fan.
+    pub rpm: Option<u32>,
+    /// Lowest nonzero duty supported by the service or its accepted curves.
     pub minimum: u8,
     pub curve: Vec<Point>,
     pub profiles: Vec<Profile>,
@@ -50,7 +53,26 @@ pub enum Target {
     Restore,
 }
 
-// Explicit custom controls never go below the service's reported minimum.
+/// Some ASUS versions report a conservative MinimalDuty even while the BIOS
+/// curve runs below it. Include valid controller curves as capability evidence.
+/// Never infer a lower limit from an instantaneous reading or enable fan stop.
+pub fn supported_minimum<'a>(reported: u8, curves: impl IntoIterator<Item = &'a [Point]>) -> u8 {
+    curves
+        .into_iter()
+        .filter(|curve| {
+            (4..=10).contains(&curve.len())
+                && curve
+                    .last()
+                    .is_some_and(|p| (20..=100).contains(&p.temperature) && p.duty == 255)
+                && curve.iter().all(|p| p.temperature <= 100 && p.duty > 0)
+                && curve
+                    .windows(2)
+                    .all(|p| p[0].temperature <= p[1].temperature && p[0].duty <= p[1].duty)
+        })
+        .flat_map(|curve| curve.iter().map(|p| p.duty))
+        .fold(reported.max(1), u8::min)
+}
+
 // Preserve the controller's final full-speed thermal point, or use 85 C if
 // its current curve is a constant full-speed profile.
 pub fn critical_temperature(curve: &[Point]) -> u8 {
@@ -105,8 +127,15 @@ pub fn manual_curve(fan: &Fan, duty: u8) -> Result<Vec<Point>, String> {
 
 pub enum Command {
     Refresh,
-    Apply { id: u32, target: Target },
+    Apply {
+        id: u32,
+        target: Target,
+    },
     Quick(crate::quick::QuickMode),
+    ApplyGroup {
+        ids: Vec<u32>,
+        setting: crate::quick::Setting,
+    },
     UndoQuick,
     Stop,
 }
@@ -212,6 +241,12 @@ fn run(incoming: mpsc::Receiver<Command>, outgoing: Arc<Mailbox>, wake: impl Fn(
                     .map_err(|e| e.clone())
                     .and_then(|s| s.apply_quick(mode)),
             ),
+            Command::ApplyGroup { ids, setting } => Some(
+                session
+                    .as_mut()
+                    .map_err(|e| e.clone())
+                    .and_then(|s| s.apply_group(&ids, &setting)),
+            ),
             Command::UndoQuick => Some(
                 session
                     .as_mut()
@@ -307,6 +342,7 @@ mod tests {
             id: 1,
             name: "CPU".into(),
             duty: 102,
+            rpm: Some(900),
             minimum: 102,
             curve: vec![
                 Point {
@@ -372,5 +408,41 @@ mod tests {
         let mut f = fan();
         f.curve[3].temperature = 80;
         assert_eq!(manual_curve(&f, 60).unwrap()[3].temperature, 80);
+    }
+
+    #[test]
+    fn accepted_bios_curve_unlocks_twenty_percent_without_enabling_fan_stop() {
+        let mut f = fan();
+        f.curve[0].duty = 51;
+        f.minimum = supported_minimum(102, [f.curve.as_slice()]);
+        assert_eq!(f.minimum, 51);
+        assert_eq!(manual_curve(&f, 20).unwrap()[0].duty, 51);
+        assert!(manual_curve(&f, 19).is_err());
+        assert!(manual_curve(&f, 0).is_err());
+        let full = manual_curve(&f, 100).unwrap();
+        assert_eq!(
+            supported_minimum(102, [full.as_slice(), f.curve.as_slice()]),
+            51
+        );
+    }
+
+    #[test]
+    fn malformed_or_stopping_curves_do_not_lower_the_service_limit() {
+        let original = fan();
+        for variant in 0..5 {
+            let mut points = original.curve.clone();
+            points[0].duty = 1;
+            match variant {
+                0 => points[0].duty = 0,
+                1 => points[3].duty = 200,
+                2 => points[1].temperature = 90,
+                3 => {
+                    points.pop();
+                }
+                _ => points[2].duty = 100,
+            }
+            assert_eq!(supported_minimum(102, [points.as_slice()]), 102);
+        }
+        assert_eq!(supported_minimum(0, []), 1);
     }
 }

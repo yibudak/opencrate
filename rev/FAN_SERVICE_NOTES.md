@@ -19,8 +19,16 @@ The Windows backend activates the service as a local COM server:
 These are interface identifiers, not identifiers assigned to an individual PC.
 Controls are enumerated by their 32-bit `Id`. The service supplies names,
 profiles, current curves, curve point counts and minimum duty. `DutyCycle` and
-`MinimalDuty` are raw byte values; the GUI converts them to percentages. No RPM
-reading is exposed by this interface.
+`MinimalDuty` are raw byte values; the GUI converts them to percentages.
+
+RPM comes from the optional installed ASUS `aaHM.acpiHmData2` COM provider
+(`{2627f8be-4482-4081-bc62-8a12ca24bdf8}`). Each snapshot calls `Refresh`, enumerates
+`Sensors`, and matches a unique sensor `name` to the control's canonical `Name`,
+not its editable `DisplayName` or collection position. The sensor's `current`
+value is the measured RPM; it is never estimated from duty. Zero RPM is retained.
+Missing providers, read failures, ambiguous names and invalid readings display
+as unavailable without disabling duty readings or fan control. Retry connection
+also reconnects this provider. No sensor settings are written.
 
 All COM objects stay on a dedicated MTA worker. Requests use a command channel;
 periodic readback uses a single-slot mailbox holding the newest snapshot and
@@ -38,11 +46,33 @@ No direct `DutyCycle` setter, `ApplyIndex`, `EnableManualMode`, WMI setter,
 FanStore.xml write or BIOS write is used. Manual speed is a thermal curve that
 holds the requested duty at low temperatures and reaches full duty at the final
 thermal point, no later than 85 degrees Celsius. Curve validation preserves the
-service's minimum duty and critical temperature, requires nondecreasing points
-and ends at full duty. Unsupported modes or point counts remain read-only.
+controller's supported minimum duty and critical temperature, requires
+nondecreasing points and ends at full duty. Some services report a conservative
+`MinimalDuty` even while an accepted BIOS curve runs lower. The effective minimum
+includes the lowest nonzero duty in valid current, saved/profile and original
+session curves. A valid 20% BIOS curve therefore permits 20% custom control even
+when `MinimalDuty` reports 40%. Invalid curves, instantaneous duty readings and
+fan-stop points cannot lower the limit. The original curve preserves this
+capability during a temporary full-speed apply. Hardware write/readback checks
+still determine whether a requested curve is accepted. Unsupported modes or
+point counts remain read-only.
 
-Full Blast and other bulk actions operate on writable, discovered controls.
-They preserve per-control restoration information and report individual errors.
+Quick actions explicitly apply once to all discovered controls; they are buttons,
+not persistent toggles or repeated writes. The service continues executing the
+resulting thermal curve. Named groups save only their name and control IDs in
+user preferences. Selecting a group or mode never writes hardware or schedules
+an apply. Group presets resolve by name on each fan; manual mode uses each fan's
+thermal limit and point count. A shared custom curve must meet every member's
+limits and point count; incompatibility rejects the entire action before writes.
+Missing or duplicate group members are also rejected. Partial write failures
+restore affected fans in reverse order, including the failing fan. Undo restores
+the last quick/group action only while its exact curves still match readback.
+
+The editor supports dragging numbered chart points, numeric temperature/duty
+editing, starting from current or ASUS profile curves, and a linear ramp. It
+keeps the controller's actual point count and final full-speed endpoint. Drafts
+are applied only on explicit click; telemetry does not overwrite in-progress
+edits. Readings refresh every two seconds, including RPM when available.
 
 ## Lifetime and ownership
 
