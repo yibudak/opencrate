@@ -42,6 +42,7 @@ BINARY_ASSETS = {
     "assets/screenshots/settings-dark.png",
     "assets/screenshots/fans-dark.png",
     "assets/readme/opencrate-lighting.png",
+    "assets/readme/opencrate-power.png",
 }
 PRIVATE_SUFFIXES = {
     ".log",

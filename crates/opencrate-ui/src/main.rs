@@ -233,7 +233,10 @@ impl App {
         TrayIconEvent::set_event_handler(Some(tray_icon_handler));
         #[cfg(feature = "diagnostics")]
         let diagnostic_tray_handler = tray_handler.clone();
+        #[cfg(feature = "diagnostics")]
         MenuEvent::set_event_handler(Some(move |event| tray_handler(event)));
+        #[cfg(not(feature = "diagnostics"))]
+        MenuEvent::set_event_handler(Some(tray_handler));
 
         let (rgba, w, h) = tray_icon_rgba();
         let icon = Icon::from_rgba(rgba, w, h).expect("tray icon");
@@ -435,7 +438,7 @@ impl App {
         self.poll_lighting(ctx);
         self.poll_preferences(ctx);
         self.fans.poll();
-        self.power.poll();
+        self.power.poll(draw && self.ui.power_visible());
         self.updates.poll(ctx, self.store.preferences.check_updates);
 
         if draw {
