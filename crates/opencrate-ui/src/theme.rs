@@ -144,6 +144,7 @@ fn style(theme: egui::Theme) -> egui::Style {
     style.spacing.interact_size = vec2(40.0, 36.0);
     style.spacing.combo_height = 360.0;
     style.spacing.slider_rail_height = 4.0;
+    style.interaction.selectable_labels = false;
     let v = &mut style.visuals;
     v.override_text_color = Some(colors.text);
     v.weak_text_color = Some(colors.muted);
