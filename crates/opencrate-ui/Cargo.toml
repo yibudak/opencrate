@@ -20,7 +20,7 @@ opencrate-fan = { workspace = true }
 opencrate-power = { workspace = true }
 egui = "0.33"
 egui-winit = { version = "0.33", default-features = false, features = ["accesskit", "clipboard", "links", "wayland", "x11"] }
-egui_software_backend = { version = "=0.0.2", default-features = false, features = ["std"] }
+egui_software_backend = { version = "=0.0.3", default-features = false, features = ["std"] }
 softbuffer = "0.4"
 winit = "0.30"
 bytemuck = "1"
